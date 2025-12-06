@@ -1,0 +1,8 @@
+{
+  "name": "(주)휘강건설 스마트 TBM",
+  "description": "용인 푸르지오 원클러스터 2,3단지 현장 안전관리 및 TBM 솔루션 (Made by 박성훈 부장)",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
