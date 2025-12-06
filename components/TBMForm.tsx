@@ -241,30 +241,37 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
   useEffect(() => {
     if (initialData) {
       const fakeId = 'edit-mode';
+      
+      // Protect data from reset by creating a saved state snapshot
+      const formState: SavedFormState = {
+        entryDate: initialData.date || new Date().toISOString().split('T')[0],
+        entryTime: initialData.time || '00:00',
+        teamId: initialData.teamId || teams[0]?.id || '',
+        leaderName: initialData.leaderName || '',
+        attendeesCount: initialData.attendeesCount || 0,
+        workDescription: initialData.workDescription || '',
+        riskFactors: initialData.riskFactors || [],
+        safetyFeedback: initialData.safetyFeedback || [],
+        tbmPhotoPreview: initialData.tbmPhotoUrl || null,
+        tbmVideoPreview: initialData.tbmVideoUrl || null,
+        tbmVideoFileName: initialData.tbmVideoFileName || null,
+        currentLogBase64: initialData.originalLogImageUrl || null,
+        videoAnalysis: initialData.videoAnalysis || null
+      };
+
       setQueue([{
           id: fakeId, 
           file: new File([], "기존 기록 수정"), 
           previewUrl: initialData.originalLogImageUrl || null, 
           isPdf: initialData.originalLogMimeType === 'application/pdf',
           status: 'processing',
-          teamsRegistered: [initialData.teamName]
+          teamsRegistered: [initialData.teamName],
+          savedFormData: formState // Key fix: inject data here
       }]);
       setActiveQueueId(fakeId);
       
-      setEntryDate(initialData.date || new Date().toISOString().split('T')[0]);
-      setEntryTime(initialData.time || '00:00');
-      setTeamId(initialData.teamId || teams[0]?.id || '');
-      setLeaderName(initialData.leaderName || '');
-      setAttendeesCount(initialData.attendeesCount || 0);
-      setWorkDescription(initialData.workDescription || '');
-      setRiskFactors(initialData.riskFactors || []);
-      setSafetyFeedback(initialData.safetyFeedback || []);
-      
-      if (initialData.tbmPhotoUrl) setTbmPhotoPreview(initialData.tbmPhotoUrl);
-      if (initialData.tbmVideoUrl) setTbmVideoPreview(initialData.tbmVideoUrl);
-      if (initialData.tbmVideoFileName) setTbmVideoFileName(initialData.tbmVideoFileName);
-      if (initialData.originalLogImageUrl) setCurrentLogBase64(initialData.originalLogImageUrl);
-      if (initialData.videoAnalysis) setVideoAnalysis(initialData.videoAnalysis);
+      // Also set immediate state to prevent flicker
+      restoreFormData(formState);
     }
   }, [initialData, teams]);
 
