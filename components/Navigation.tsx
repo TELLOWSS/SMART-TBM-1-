@@ -1,11 +1,12 @@
 
 import React from 'react';
-import { LayoutDashboard, PlusCircle, FileText, ShieldCheck, ChevronRight, Settings, Shield, Award, Sparkles } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, FileText, ShieldCheck, ChevronRight, Settings, Shield, Award, Sparkles, History } from 'lucide-react';
 
 interface NavigationProps {
   currentView: string;
   setCurrentView: (view: string) => void;
   onOpenSettings: () => void;
+  onShowHistory: () => void; // New Prop
 }
 
 // Updated Logo: HUIGANG Construction Premium Brand
@@ -24,7 +25,7 @@ const BrandLogo = () => (
   </svg>
 );
 
-export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, onOpenSettings }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, onOpenSettings, onShowHistory }) => {
   const navItems = [
     { id: 'dashboard', label: '통합 대시보드', sub: 'Main Dashboard', icon: <LayoutDashboard size={20} /> },
     { id: 'new', label: '스마트 TBM 등록', sub: 'New TBM Entry', icon: <PlusCircle size={20} /> },
@@ -177,19 +178,29 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentV
                 </div>
              </div>
              
-             <div className="mt-3 pt-2 flex items-center justify-between text-[10px] text-slate-500 font-mono border-t border-slate-700/50">
-                <span>Access Level: Admin</span>
+             {/* Updated Footer Actions */}
+             <div className="mt-3 pt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-500 font-mono border-t border-slate-700/50">
                 <button 
-                  onClick={onOpenSettings}
-                  className="hover:text-white hover:bg-slate-700 p-1 rounded-full transition-all"
-                  title="설정 및 백업"
+                  onClick={onShowHistory}
+                  className="flex items-center justify-center gap-1.5 bg-slate-700/50 hover:bg-blue-600/20 hover:text-blue-400 text-slate-400 py-1.5 rounded transition-all border border-transparent hover:border-blue-500/30"
                 >
-                  <Settings size={14} />
+                   <History size={10} />
+                   <span>개발 히스토리</span>
                 </button>
+                <div className="flex items-center justify-between px-1">
+                   <span className="text-[9px] text-slate-600">v2.5.2</span>
+                   <button 
+                     onClick={onOpenSettings}
+                     className="hover:text-white hover:bg-slate-700 p-1 rounded-full transition-all"
+                     title="설정 및 백업"
+                   >
+                     <Settings size={12} />
+                   </button>
+                </div>
              </div>
           </div>
           <div className="text-center mt-3">
-             <p className="text-[9px] text-slate-600 font-medium">© 2025 (주)휘강건설 System v2.5</p>
+             <p className="text-[9px] text-slate-600 font-medium">© 2025 (주)휘강건설 System</p>
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { TBMForm } from './components/TBMForm';
 import { ReportView } from './components/ReportView';
 import { ReportCenter } from './components/ReportCenter';
 import { RiskAssessmentManager } from './components/RiskAssessmentManager';
+import { HistoryModal } from './components/HistoryModal';
 import { TBMEntry, MonthlyRiskAssessment, TeamOption, TeamCategory } from './types';
 import { TEAMS } from './constants';
 import { Download, Upload, Trash2, X, Settings, Database, Eraser, Plus, Users, Edit3, Save } from 'lucide-react';
@@ -79,6 +80,7 @@ function App() {
   const [editingEntry, setEditingEntry] = useState<TBMEntry | null>(null); 
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false); // History Modal State
   const [settingsTab, setSettingsTab] = useState<'backup' | 'teams'>('teams'); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -325,7 +327,12 @@ function App() {
 
   return (
     <div className="flex min-h-screen relative overflow-hidden bg-[#F1F5F9]">
-      <Navigation currentView={currentView} setCurrentView={setCurrentView} onOpenSettings={() => setIsSettingsOpen(true)} />
+      <Navigation 
+         currentView={currentView} 
+         setCurrentView={setCurrentView} 
+         onOpenSettings={() => setIsSettingsOpen(true)} 
+         onShowHistory={() => setIsHistoryOpen(true)}
+      />
       <main className="flex-1 md:ml-72 p-4 md:p-8 mb-20 md:mb-0 relative z-10">
         <header className="flex justify-between items-center mb-8 no-print">
           <div>
@@ -336,7 +343,7 @@ function App() {
               {currentView === 'reports' && 'Safe Work Report Center'}
             </h1>
             <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">
-               (주)휘강건설 스마트 안전관리 시스템 v2.4
+               (주)휘강건설 스마트 안전관리 시스템 v2.5
             </p>
           </div>
         </header>
@@ -345,6 +352,10 @@ function App() {
 
         {showReportModal && (
           <ReportView entries={entries} onClose={() => setShowReportModal(false)} signatures={signatures} onUpdateSignature={handleUpdateSignature} onEdit={handleEditEntry} onDelete={handleRequestDelete} />
+        )}
+        
+        {isHistoryOpen && (
+          <HistoryModal onClose={() => setIsHistoryOpen(false)} />
         )}
 
         {deleteState.isOpen && (
