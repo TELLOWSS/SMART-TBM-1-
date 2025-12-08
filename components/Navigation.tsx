@@ -178,23 +178,39 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentV
                 </div>
              </div>
              
-             {/* Updated Footer Actions */}
-             <div className="mt-3 pt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-500 font-mono border-t border-slate-700/50">
+             {/* Updated Footer Actions - Clean & Professional */}
+             <div className="mt-4 pt-4 border-t border-slate-700/50 flex flex-col gap-3">
                 <button 
                   onClick={onShowHistory}
-                  className="flex items-center justify-center gap-1.5 bg-slate-700/50 hover:bg-blue-600/20 hover:text-blue-400 text-slate-400 py-1.5 rounded transition-all border border-transparent hover:border-blue-500/30"
+                  className="w-full group relative overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl p-3 transition-all duration-300 shadow-sm"
                 >
-                   <History size={10} />
-                   <span>개발 히스토리</span>
+                  <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <History size={48} className="text-white transform rotate-12 translate-x-2 -translate-y-2" />
+                  </div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex flex-col items-start">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-300">Update Log</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">개발 히스토리</span>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-slate-950/50 border border-slate-700 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:border-slate-500 transition-all">
+                       <ChevronRight size={14} />
+                    </div>
+                  </div>
                 </button>
-                <div className="flex items-center justify-between px-1">
-                   <span className="text-[9px] text-slate-600">v2.5.2</span>
+
+                <div className="flex items-center justify-between px-2">
+                   <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-slate-500">v2.5.5 Stable</span>
+                   </div>
                    <button 
                      onClick={onOpenSettings}
-                     className="hover:text-white hover:bg-slate-700 p-1 rounded-full transition-all"
-                     title="설정 및 백업"
+                     className="flex items-center gap-1.5 text-slate-500 hover:text-white hover:bg-slate-700/50 px-2 py-1.5 rounded-lg transition-all"
                    >
                      <Settings size={12} />
+                     <span className="text-[10px] font-bold">설정</span>
                    </button>
                 </div>
              </div>

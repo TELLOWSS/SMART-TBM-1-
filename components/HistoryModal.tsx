@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap } from 'lucide-react';
+import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2 } from 'lucide-react';
 
 interface HistoryModalProps {
   onClose: () => void;
@@ -9,9 +9,17 @@ interface HistoryModalProps {
 
 const milestones = [
   {
+    version: 'v2.5.5',
+    date: '2025.12.07',
+    title: '동영상 자동 압축/최적화 엔진',
+    desc: '브라우저단에서 고화질 영상을 480p/VP8 코덱으로 실시간 압축. 100MB 이상 대용량 파일도 10MB대로 줄여 AI 분석 실패율 0% 도전.',
+    icon: <Minimize2 size={18} />,
+    color: 'bg-amber-500'
+  },
+  {
     version: 'v2.5.2',
     date: '2025.12.06',
-    title: '시스템 안정성 강화 (Current)',
+    title: '시스템 안정성 강화',
     desc: '수정 모드 진입 시 데이터 초기화 문제 해결 및 대용량 동영상 처리 로직 최적화 완료.',
     icon: <GitCommit size={18} />,
     color: 'bg-rose-500'
@@ -96,30 +104,40 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ onClose }) => {
         {/* Timeline Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scrollbar">
            <div className="relative border-l-2 border-slate-200 ml-3 space-y-8 py-2">
-              {milestones.map((milestone, idx) => (
+              {milestones.map((milestone, idx) => {
+                 const isLatest = idx === 0;
+                 return (
                  <div key={idx} className="relative pl-8 group">
                     {/* Timeline Dot */}
-                    <div className={`absolute -left-[9px] top-0 w-[18px] h-[18px] rounded-full border-4 border-slate-50 ${milestone.color} shadow-sm group-hover:scale-125 transition-transform duration-300`}></div>
+                    <div className={`absolute -left-[9px] top-0 w-[18px] h-[18px] rounded-full border-4 border-slate-50 ${milestone.color} shadow-sm group-hover:scale-125 transition-transform duration-300 ${isLatest ? 'ring-4 ring-amber-100 animate-pulse' : ''}`}></div>
                     
                     {/* Content Card */}
                     <div className="flex flex-col gap-1">
                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded text-white ${milestone.color}`}>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded text-white ${milestone.color} ${isLatest ? 'shadow-lg shadow-amber-300' : ''}`}>
                              {milestone.version}
                           </span>
-                          <span className="text-xs font-bold text-slate-400">{milestone.date}</span>
+                          <span className={`text-xs font-bold ${isLatest ? 'text-amber-600' : 'text-slate-400'}`}>{milestone.date}</span>
+                          {isLatest && <span className="text-[9px] font-black text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded animate-bounce">NEW</span>}
                        </div>
                        
-                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 mt-1">
+                       <h3 className={`font-bold text-sm flex items-center gap-2 mt-1 ${isLatest ? 'text-slate-900' : 'text-slate-800'}`}>
                           {milestone.title}
                        </h3>
                        
-                       <p className="text-xs text-slate-500 leading-relaxed break-keep bg-white p-3 rounded-xl border border-slate-200 shadow-sm mt-1 group-hover:border-blue-300 transition-colors">
+                       <div className={`text-xs leading-relaxed break-keep p-3 rounded-xl border mt-1 transition-all relative overflow-hidden ${
+                          isLatest 
+                          ? 'bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-100 border-amber-300 shadow-[0_0_20px_rgba(251,191,36,0.3)] text-slate-800 font-medium' 
+                          : 'bg-white border-slate-200 text-slate-500 shadow-sm group-hover:border-blue-300'
+                       }`}>
+                          {isLatest && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -skew-x-12 animate-shimmer pointer-events-none"></div>
+                          )}
                           {milestone.desc}
-                       </p>
+                       </div>
                     </div>
                  </div>
-              ))}
+              )})}
               
               {/* Start Point */}
               <div className="relative pl-8">

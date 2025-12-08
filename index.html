@@ -58,11 +58,17 @@
         }
       }
 
+      @keyframes shimmer {
+        0% { transform: translateX(-150%) skewX(-12deg); }
+        100% { transform: translateX(150%) skewX(-12deg); }
+      }
+
       /* Utility Classes for Animation */
       .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
       .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       .animate-float { animation: float 3s ease-in-out infinite; }
+      .animate-shimmer { animation: shimmer 2.5s infinite linear; }
       
       .delay-100 { animation-delay: 100ms; }
       .delay-200 { animation-delay: 200ms; }

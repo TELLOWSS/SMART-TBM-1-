@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { TBMEntry, RiskAssessmentItem, SafetyGuideline, TeamOption, TBMAnalysisResult } from '../types';
 import { analyzeTBMLog, evaluateTBMVideo } from '../services/geminiService';
+import { compressVideo } from '../utils/videoUtils';
 import { Upload, Camera, Sparkles, AlertTriangle, CheckCircle2, Loader2, FileText, X, ShieldCheck, Layers, ArrowLeft, Trash2, Film, Save, ZoomIn, ZoomOut, Maximize, Minimize, RotateCw, Clock, Plus, Check, PlayCircle, BarChart, Mic, Volume2, Edit2, RefreshCcw } from 'lucide-react';
 
 interface TBMFormProps {
@@ -72,6 +73,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
   // New: Video Analysis State
   const [videoAnalysis, setVideoAnalysis] = useState<TBMAnalysisResult | null>(null);
   const [isVideoAnalyzing, setIsVideoAnalyzing] = useState(false);
+  const [videoStatusMessage, setVideoStatusMessage] = useState<string>(''); // Progress Message
   const [isEditingAnalysis, setIsEditingAnalysis] = useState(false); // To allow manual correction
 
   // Current Doc Base64 (for AI analysis)
@@ -147,6 +149,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
      setTbmVideoFileName(null);
      setVideoAnalysis(null);
      setIsEditingAnalysis(false);
+     setVideoStatusMessage('');
      
      // Reset File inputs
      if (photoInputRef.current) photoInputRef.current.value = '';
@@ -340,53 +343,80 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     }
   };
 
+  // --- Updated Video Audit Logic for Compression ---
   const handleVideoAudit = async () => {
     if (!tbmVideoFile) {
       alert("분석할 동영상 파일이 없습니다.");
       return;
     }
 
-    // Auto-slice logic for large files (> 20MB)
-    // We slice to 15MB to ensure Base64 encoding stays within safe API limits (~20MB payload)
-    const SLICE_THRESHOLD = 20 * 1024 * 1024; // 20MB check
-    const SAFE_CHUNK_SIZE = 15 * 1024 * 1024; // 15MB slice
+    setIsVideoAnalyzing(true);
+    setVideoStatusMessage('영상 준비 중...');
     
     let blobToProcess: Blob = tbmVideoFile;
-    let isLargeFile = false;
+    let mimeTypeToProcess = tbmVideoFile.type;
+    const SIZE_THRESHOLD = 20 * 1024 * 1024; // 20MB
 
-    if (tbmVideoFile.size > SLICE_THRESHOLD) {
-       console.log(`Large file detected (${(tbmVideoFile.size / 1024 / 1024).toFixed(2)}MB). Slicing to 15MB.`);
-       blobToProcess = tbmVideoFile.slice(0, SAFE_CHUNK_SIZE);
-       isLargeFile = true;
-    }
-
-    setIsVideoAnalyzing(true);
     try {
+      // 1. Check size and Compress if needed
+      if (tbmVideoFile.size > SIZE_THRESHOLD) {
+         setVideoStatusMessage('⏳ 대용량 영상 감지! 최적화(압축) 중...\n(화면이 멈춘 것이 아닙니다. 잠시만 기다려주세요.)');
+         try {
+            // Compress using helper
+            const compressedBlob = await compressVideo(tbmVideoFile);
+            
+            blobToProcess = compressedBlob;
+            mimeTypeToProcess = 'video/webm'; // Compressor returns WebM usually
+            
+            console.log(`Compression complete. New size: ${(blobToProcess.size / 1024 / 1024).toFixed(2)}MB`);
+            setVideoStatusMessage('✅ 최적화 완료! AI 분석 서버로 전송합니다...');
+            
+            // Safety check: if still > 20MB after compression (very rare for short TBM), slice it
+            if (blobToProcess.size > SIZE_THRESHOLD) {
+               console.warn("Compressed file still too large. Slicing.");
+               blobToProcess = blobToProcess.slice(0, SIZE_THRESHOLD);
+            }
+
+         } catch (compError) {
+            console.error("Compression failed:", compError);
+            alert("동영상 최적화에 실패했습니다. 앞부분만 잘라서 분석합니다.");
+            blobToProcess = tbmVideoFile.slice(0, SIZE_THRESHOLD);
+            setVideoStatusMessage('압축 실패 -> 부분 전송 중...');
+         }
+      } else {
+         setVideoStatusMessage('AI 서버로 영상을 전송하고 있습니다...');
+      }
+
+      // 2. Convert to Base64
       const reader = new FileReader();
       reader.readAsDataURL(blobToProcess);
+      
       reader.onload = async (e) => {
         const base64String = e.target?.result as string;
         if (base64String) {
            const base64Data = base64String.split(',')[1];
            
-           if (isLargeFile) {
-               alert("ℹ️ 대용량 영상이 감지되어, 분석을 위해 앞부분(약 15MB)만 추출하여 AI에게 전송합니다.");
-           }
-
-           const analysis = await evaluateTBMVideo(base64Data, tbmVideoFile.type);
+           // 3. Call AI API
+           const analysis = await evaluateTBMVideo(base64Data, mimeTypeToProcess);
+           
            setVideoAnalysis(analysis);
            setIsEditingAnalysis(false); 
         }
         setIsVideoAnalyzing(false);
+        setVideoStatusMessage('');
       };
+      
       reader.onerror = () => {
          alert("파일 처리 중 오류가 발생했습니다.");
          setIsVideoAnalyzing(false);
+         setVideoStatusMessage('');
       }
+
     } catch (error) {
        console.error(error);
        alert("AI 분석 요청 실패: 네트워크 상태를 확인해주세요.");
        setIsVideoAnalyzing(false);
+       setVideoStatusMessage('');
     }
   };
 
@@ -516,6 +546,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
       setTbmVideoFileName(file.name);
       setVideoAnalysis(null); // Reset previous analysis when new file uploaded
       setIsEditingAnalysis(false);
+      setVideoStatusMessage('');
     }
   };
 
@@ -887,14 +918,23 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
 
                           {/* Video Audit Result (Editable) */}
                           {tbmVideoPreview && !videoAnalysis && (
-                              <button 
-                                 onClick={handleVideoAudit}
-                                 disabled={isVideoAnalyzing}
-                                 className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-                              >
-                                 {isVideoAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>}
-                                 AI 품질 진단 (영상 분석)
-                              </button>
+                             <div className="space-y-2">
+                                <button 
+                                   onClick={handleVideoAudit}
+                                   disabled={isVideoAnalyzing}
+                                   className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                                >
+                                   {isVideoAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>}
+                                   AI 품질 진단 (영상 분석)
+                                </button>
+                                {isVideoAnalyzing && videoStatusMessage && (
+                                   <div className="bg-slate-800 text-white text-[10px] p-2 rounded-lg text-center animate-pulse">
+                                      {videoStatusMessage.split('\n').map((line, i) => (
+                                         <p key={i}>{line}</p>
+                                      ))}
+                                   </div>
+                                )}
+                             </div>
                           )}
                           
                           {videoAnalysis && (
