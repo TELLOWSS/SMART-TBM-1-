@@ -1,129 +1,155 @@
 
 /**
- * 동영상 압축 유틸리티
- * 브라우저의 Canvas와 MediaRecorder를 사용하여 동영상의 해상도와 비트레이트를 낮춥니다.
+ * 동영상 압축 유틸리티 (Safe Mode - Video Only)
+ * 
+ * [오류 해결을 위한 조치]
+ * 1. Audio Track 제거: 브라우저에서의 오디오/비디오 믹싱 과정에서 발생하는 컨테이너 손상 방지
+ * 2. Bitrate: 150kbps (초경량)
+ * 3. Resolution: 360p
+ * 4. Duration: 10초
  */
 
 export const compressVideo = (file: File): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     const url = URL.createObjectURL(file);
+    
     video.src = url;
-    video.muted = true; // 자동 재생을 위해 음소거 (스트림에는 오디오 포함됨)
+    video.muted = true; // 무음 처리 (오디오 트랙 사용 안함)
     video.playsInline = true;
     video.crossOrigin = "anonymous";
+    video.preload = "metadata";
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.removeAttribute('src');
+      video.pause();
+      video.load();
+      video.remove();
+    };
+
+    // 타임아웃 15초
+    const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error("Video timeout"));
+    }, 15000);
 
     video.onloadedmetadata = () => {
-      // 1. 타겟 해상도 설정 (480p 수준으로 리사이징 - AI 분석에 충분함)
-      // 원본 비율 유지
-      const MAX_HEIGHT = 480;
+      clearTimeout(timeoutId);
+
+      // 1. 해상도 360p 강제 (짝수 맞춤)
+      const TARGET_HEIGHT = 360;
       let width = video.videoWidth;
       let height = video.videoHeight;
-
-      if (height > MAX_HEIGHT) {
-        width = Math.round(width * (MAX_HEIGHT / height));
-        height = MAX_HEIGHT;
+      
+      if (height > TARGET_HEIGHT) {
+        width = Math.round(width * (TARGET_HEIGHT / height));
+        height = TARGET_HEIGHT;
       }
+      if (width % 2 !== 0) width--;
+      if (height % 2 !== 0) height--;
 
-      // 2. 캔버스 설정
+      // 2. 캔버스 준비
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: false });
 
       if (!ctx) {
-        URL.revokeObjectURL(url);
-        reject(new Error("Canvas context creation failed"));
+        cleanup();
+        reject(new Error("Canvas init failed"));
         return;
       }
 
-      // 3. 미디어 스트림 생성
-      // Canvas에서 비디오 프레임 캡처 (30fps)
-      const stream = canvas.captureStream(30);
-      
-      // 오디오 트랙 추출 및 결합 (오디오가 있는 경우)
-      // 주의: 일부 브라우저 보안 정책으로 인해 오디오 캡처가 까다로울 수 있으나, 
-      // MediaElementAudioSourceNode 등을 사용하지 않고 Video Element의 캡처가 지원되지 않는 경우
-      // 순수 Video Stream만이라도 보냅니다. (Chrome 등 최신 브라우저는 오디오 트랙 핸들링 필요)
-      
-      // 간단한 방식: 비디오 재생 -> 캔버스 그림 -> 녹화
-      // MediaRecorder 옵션 설정 (용량 제어를 위한 핵심)
+      // 3. 스트림 생성 (Video Only - 10 FPS)
+      const stream = canvas.captureStream(10);
+
+      // 4. Recorder 설정 (150kbps)
       const options: MediaRecorderOptions = {
-        mimeType: 'video/webm;codecs=vp8', // 호환성이 좋은 WebM VP8 사용
-        videoBitsPerSecond: 750000, // 750kbps (약 1분에 5.5MB 정도) -> 3분 영상도 20MB 언더 가능
+        videoBitsPerSecond: 150000, 
+        mimeType: 'video/webm;codecs=vp8'
       };
 
-      // 브라우저가 지원하는 mimeType 확인
-      if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
-         // fallback
-         if (MediaRecorder.isTypeSupported('video/mp4')) {
-             options.mimeType = 'video/mp4';
-         } else {
-             delete options.mimeType; // 브라우저 기본값 사용
-         }
+      if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+           if (MediaRecorder.isTypeSupported('video/webm')) {
+               options.mimeType = 'video/webm';
+           } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+               options.mimeType = 'video/mp4';
+           } else {
+               options.mimeType = '';
+           }
       }
 
       let mediaRecorder: MediaRecorder;
       try {
         mediaRecorder = new MediaRecorder(stream, options);
       } catch (e) {
-        URL.revokeObjectURL(url);
-        reject(e);
+        cleanup();
+        reject(new Error("MediaRecorder failed"));
         return;
       }
 
       const chunks: Blob[] = [];
-
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          chunks.push(e.data);
-        }
+        if (e.data && e.data.size > 0) chunks.push(e.data);
       };
 
       mediaRecorder.onstop = () => {
-        const compressedBlob = new Blob(chunks, { type: 'video/webm' });
-        URL.revokeObjectURL(url);
-        resolve(compressedBlob);
+        try {
+            // 최종 Blob 생성
+            const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'video/webm' });
+            console.log(`🎥 Video Processed (Video Only): ${(blob.size / 1024).toFixed(1)} KB`);
+            resolve(blob);
+        } catch (e) {
+            reject(e);
+        } finally {
+            cleanup();
+        }
       };
 
-      mediaRecorder.onerror = (e) => {
-        URL.revokeObjectURL(url);
-        reject(e);
-      };
+      // 5. 녹화 루프 (10초)
+      const DURATION_MS = 10000;
+      let startTime = 0;
+      let animationId: number;
 
-      // 4. 재생 및 녹화 루프
-      // 비디오가 재생되는 동안 캔버스에 그리기
-      const drawFrame = () => {
+      const draw = () => {
         if (video.paused || video.ended) return;
+        
+        if (Date.now() - startTime > DURATION_MS) {
+            if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                video.pause();
+            }
+            return;
+        }
+
         ctx.drawImage(video, 0, 0, width, height);
-        requestAnimationFrame(drawFrame);
+        animationId = requestAnimationFrame(draw);
       };
 
       video.onplay = () => {
-        drawFrame();
-        // 오디오 트랙이 캔버스 스트림에 자동으로 포함되지 않으므로
-        // 실제로는 AudioContext를 써야 완벽하지만, 복잡도를 줄이기 위해
-        // 여기서는 비디오(시각 정보) 위주로 압축합니다. 
-        // *TBM 분석에서 음성 명확도도 중요하므로, 가능하면 오디오도 필요하지만*
-        // 브라우저 제약상 Canvas CaptureStream은 오디오를 포함하지 않습니다.
-        // 따라서 AI에게 "오디오 분석 불가 시 시각 정보 위주 평가"를 요청하거나
-        // 오디오 스트림을 합치는 고급 로직이 필요합니다.
-        // 현재 버전은 '시각적 압축'에 집중합니다.
-        mediaRecorder.start();
+        startTime = Date.now();
+        mediaRecorder.start(); 
+        draw();
       };
 
       video.onended = () => {
-        mediaRecorder.stop();
+        if (mediaRecorder.state === 'recording') mediaRecorder.stop();
+        cancelAnimationFrame(animationId);
       };
 
-      // 재생 속도를 높여서 압축 시간 단축 (최대 2배속, 오디오 피치 문제 있을 수 있으나 AI 분석용으론 허용)
-      video.playbackRate = 2.0; 
-      video.play().catch(err => reject(err));
+      // 6. 재생 (Muted)
+      video.muted = true;
+      video.currentTime = 0;
+      video.play().catch(e => {
+          cleanup();
+          reject(new Error("Playback failed"));
+      });
     };
 
-    video.onerror = (e) => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Video loading failed"));
+    video.onerror = () => {
+        cleanup();
+        reject(new Error("File load error"));
     };
   });
 };

@@ -2,7 +2,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { MonthlyRiskAssessment, SafetyGuideline } from '../types';
 import { extractMonthlyPriorities, ExtractedPriority, MonthlyExtractionResult } from '../services/geminiService';
-import { Upload, CheckCircle2, Loader2, Trash2, ShieldCheck, AlertTriangle, ArrowRight, Plus, Tag, RefreshCcw, Calendar, TrendingUp, AlertCircle, ArrowUpCircle } from 'lucide-react';
+import { Upload, Loader2, Trash2, ShieldCheck, Plus, RefreshCcw, Calendar, TrendingUp, Search, Edit2, Save, X } from 'lucide-react';
 
 interface RiskAssessmentManagerProps {
   assessments: MonthlyRiskAssessment[];
@@ -27,8 +27,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
   // Get previous month assessment for comparison
   const previousAssessment = useMemo(() => {
      if (!activeAssessment) return null;
-     // Find the month immediately before the active one in the sorted list
-     // Since sortedMonths is Descending (Dec, Nov, Oct...), we look for the next index
      const currentIndex = sortedMonths.findIndex(a => a.id === activeAssessment.id);
      if (currentIndex !== -1 && currentIndex < sortedMonths.length - 1) {
         return sortedMonths[currentIndex + 1];
@@ -44,9 +42,15 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
   const [manualCategory, setManualCategory] = useState('공통');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- NEW: Search & Edit State ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{content: string, level: string, category: string}>({
+      content: '', level: 'GENERAL', category: '공통'
+  });
+
   // --- Helpers ---
   const normalizeString = (str: string) => {
-    // Remove spaces, newlines, and punctuation for loose comparison
     return str.replace(/[\s\n\r.,\-()[\]]/g, '').trim();
   };
 
@@ -94,7 +98,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
           const result: MonthlyExtractionResult = await extractMonthlyPriorities(base64Data, file.type);
           const { items: extracted, detectedMonth } = result;
 
-          // --- SMART MONTH DETECTION LOGIC ---
           let targetAssessment = activeAssessment;
           let isNewMonthCreated = false;
 
@@ -102,7 +105,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
              const message = `📄 문서 분석 결과: [${detectedMonth}월] 자료로 보입니다.\n\n현재 선택된 [${activeAssessment.month}월]이 아닌,\n👉 [${detectedMonth}월] 평가표로 새로 등록(또는 이동)하시겠습니까?`;
              
              if (confirm(message)) {
-                // Check if target month already exists
                 const existingTarget = assessments.find(a => a.month === detectedMonth);
                 
                 if (existingTarget) {
@@ -110,7 +112,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                    setSelectedMonthId(existingTarget.id);
                    alert(`${detectedMonth}월 데이터가 이미 존재하여 해당 월로 이동 후 추가합니다.`);
                 } else {
-                   // Create New Month
                    const newAssessment: MonthlyRiskAssessment = {
                       id: `MONTH-${Date.now()}`,
                       month: detectedMonth,
@@ -133,7 +134,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
              return;
           }
 
-          // --- MERGE LOGIC (Targeting the correct assessment) ---
           const currentPriorities = [...targetAssessment.priorities];
           let addedCount = 0;
           
@@ -156,19 +156,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
              return 0;
           });
 
-          // Update the SPECIFIC assessment (targetAssessment)
-          const updatedAssessments = (isNewMonthCreated ? [targetAssessment, ...assessments] : assessments).map(a => 
-             a.id === targetAssessment!.id 
-             ? { ...a, priorities: currentPriorities, fileName: file.name }
-             : a
-          );
-          
-          // Note: If we just created a new month, it's already in the list if we handled it right. 
-          // However, simpler to just map over the latest state passed to onSave.
-          // The issue is React state updates are async. 
-          // If isNewMonthCreated is true, 'assessments' variable here is stale compared to what we just saved.
-          // So we re-construct the list carefully.
-          
           let finalAssessments = assessments;
           if (isNewMonthCreated) {
              finalAssessments = [targetAssessment, ...assessments];
@@ -217,9 +204,11 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
 
   const removeFromFinal = (item: SafetyGuideline) => {
     if (!activeAssessment) return;
-    const newPriorities = activeAssessment.priorities.filter(p => p.content !== item.content);
-    updateActiveAssessment(newPriorities);
-    setCandidates(prev => [...prev, { content: item.content, level: item.level, category: item.category }]);
+    if (confirm("정말 삭제하시겠습니까?")) {
+        const newPriorities = activeAssessment.priorities.filter(p => p.content !== item.content);
+        updateActiveAssessment(newPriorities);
+        // Do not add to candidates when deleting explicitly
+    }
   };
 
   const addManualPriority = () => {
@@ -243,6 +232,34 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
      }
   }
 
+  // --- Edit Logic ---
+  const startEditing = (index: number, item: SafetyGuideline) => {
+      setEditingIndex(index);
+      setEditForm({
+          content: item.content,
+          level: item.level,
+          category: item.category
+      });
+  };
+
+  const cancelEditing = () => {
+      setEditingIndex(null);
+  };
+
+  const saveEditing = () => {
+      if (!activeAssessment || editingIndex === null) return;
+      
+      const updatedPriorities = [...activeAssessment.priorities];
+      updatedPriorities[editingIndex] = {
+          content: editForm.content,
+          level: editForm.level as 'HIGH' | 'GENERAL',
+          category: editForm.category
+      };
+      
+      updateActiveAssessment(updatedPriorities);
+      setEditingIndex(null);
+  };
+
   // --- Components ---
 
   const CategoryBadge = ({ category }: { category: string }) => {
@@ -260,6 +277,16 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
       </span>
     );
   };
+
+  // --- Filtered List for Display ---
+  const displayPriorities = useMemo(() => {
+     if (!activeAssessment) return [];
+     if (!searchTerm.trim()) return activeAssessment.priorities;
+     return activeAssessment.priorities.filter(item => 
+        item.content.includes(searchTerm) || 
+        item.category.includes(searchTerm)
+     );
+  }, [activeAssessment, searchTerm]);
 
   // --- Render ---
 
@@ -401,7 +428,19 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                             <ShieldCheck className="text-green-600" size={20}/>
                             <h3 className="font-bold text-slate-800">최종 관리 목록</h3>
                          </div>
-                         <div className="flex gap-2">
+                         <div className="flex gap-2 items-center">
+                            {/* NEW: Search Bar */}
+                           <div className="relative">
+                               <input 
+                                   type="text" 
+                                   placeholder="항목 검색..." 
+                                   value={searchTerm}
+                                   onChange={(e) => setSearchTerm(e.target.value)}
+                                   className="pl-8 pr-3 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:border-blue-500 w-40"
+                               />
+                               <Search size={14} className="absolute left-2.5 top-2 text-slate-400"/>
+                           </div>
+                           
                            {previousAssessment && (
                               <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-lg flex items-center gap-1">
                                  <TrendingUp size={12}/> vs {previousAssessment.month}월 비교 중
@@ -417,39 +456,99 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                                <p>등록된 항목이 없습니다.</p>
                             </div>
                          ) : (
-                            activeAssessment.priorities.map((item, idx) => {
-                               // DIFF LOGIC
-                               let status: 'NEW' | 'CHANGED' | 'SAME' = 'SAME';
-                               if (previousAssessment) {
-                                  const prevItem = previousAssessment.priorities.find(p => p.content === item.content);
-                                  if (!prevItem) {
-                                     status = 'NEW';
-                                  } else if (prevItem.level !== item.level) {
-                                     status = 'CHANGED';
-                                  }
-                               }
+                            displayPriorities.length === 0 ? (
+                                <div className="text-center py-10 text-slate-400 font-medium">검색 결과가 없습니다.</div>
+                            ) : (
+                                // Map filtered list but use original Index to manage editing
+                                activeAssessment.priorities.map((item, originalIndex) => {
+                                   // Manual Filter Check
+                                   if (searchTerm.trim() && !(item.content.includes(searchTerm) || item.category.includes(searchTerm))) {
+                                       return null; 
+                                   }
 
-                               return (
-                                  <div key={idx} className={`p-3 rounded-xl border flex items-start gap-3 group transition-all ${status === 'NEW' ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
-                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${item.level === 'HIGH' ? 'bg-red-500 text-white shadow-red-200 shadow-sm' : 'bg-slate-200 text-slate-600'}`}>
-                                        {item.level === 'HIGH' ? '상' : '일반'}
-                                     </div>
-                                     
-                                     <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                           {status === 'NEW' && <span className="text-[9px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded animate-pulse">NEW</span>}
-                                           {status === 'CHANGED' && <span className="text-[9px] font-black bg-orange-500 text-white px-1.5 py-0.5 rounded">등급변경</span>}
-                                           <CategoryBadge category={item.category} />
-                                        </div>
-                                        <p className="text-sm font-bold text-slate-800 leading-snug">{item.content}</p>
-                                     </div>
+                                   // EDIT MODE RENDER
+                                   if (editingIndex === originalIndex) {
+                                       return (
+                                           <div key={originalIndex} className="p-3 rounded-xl border border-blue-400 bg-blue-50/50 flex flex-col gap-2 shadow-md">
+                                               <div className="flex gap-2">
+                                                   <input 
+                                                       type="text"
+                                                       value={editForm.content}
+                                                       onChange={(e) => setEditForm({...editForm, content: e.target.value})}
+                                                       className="flex-1 text-sm font-bold border border-blue-300 rounded px-2 py-1 outline-none"
+                                                       placeholder="오타 수정..."
+                                                       autoFocus
+                                                   />
+                                               </div>
+                                               <div className="flex justify-between items-center">
+                                                   <div className="flex gap-2">
+                                                       <select 
+                                                           value={editForm.level} 
+                                                           onChange={(e) => setEditForm({...editForm, level: e.target.value})}
+                                                           className="text-xs font-bold border border-blue-300 rounded px-1 py-1 bg-white"
+                                                       >
+                                                           <option value="HIGH">상(High)</option>
+                                                           <option value="GENERAL">일반</option>
+                                                       </select>
+                                                       <input 
+                                                           type="text" 
+                                                           value={editForm.category}
+                                                           onChange={(e) => setEditForm({...editForm, category: e.target.value})}
+                                                           className="w-20 text-xs font-bold border border-blue-300 rounded px-2 py-1 bg-white text-center"
+                                                           placeholder="공종"
+                                                       />
+                                                   </div>
+                                                   <div className="flex gap-1">
+                                                       <button onClick={saveEditing} className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1 text-xs font-bold px-3">
+                                                           <Save size={14}/> 저장
+                                                       </button>
+                                                       <button onClick={cancelEditing} className="p-1.5 bg-white border border-slate-300 text-slate-600 rounded hover:bg-slate-50 flex items-center gap-1 text-xs font-bold px-3">
+                                                           <X size={14}/> 취소
+                                                       </button>
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       );
+                                   }
 
-                                     <button onClick={() => removeFromFinal(item)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
-                                        <Trash2 size={16}/>
-                                     </button>
-                                  </div>
-                               );
-                            })
+                                   // NORMAL MODE RENDER
+                                   let status: 'NEW' | 'CHANGED' | 'SAME' = 'SAME';
+                                   if (previousAssessment) {
+                                      const prevItem = previousAssessment.priorities.find(p => p.content === item.content);
+                                      if (!prevItem) {
+                                         status = 'NEW';
+                                      } else if (prevItem.level !== item.level) {
+                                         status = 'CHANGED';
+                                      }
+                                   }
+
+                                   return (
+                                      <div key={originalIndex} className={`p-3 rounded-xl border flex items-start gap-3 group transition-all ${status === 'NEW' ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
+                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${item.level === 'HIGH' ? 'bg-red-500 text-white shadow-red-200 shadow-sm' : 'bg-slate-200 text-slate-600'}`}>
+                                            {item.level === 'HIGH' ? '상' : '일반'}
+                                         </div>
+                                         
+                                         <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                               {status === 'NEW' && <span className="text-[9px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded animate-pulse">NEW</span>}
+                                               {status === 'CHANGED' && <span className="text-[9px] font-black bg-orange-500 text-white px-1.5 py-0.5 rounded">등급변경</span>}
+                                               <CategoryBadge category={item.category} />
+                                            </div>
+                                            <p className="text-sm font-bold text-slate-800 leading-snug">{item.content}</p>
+                                         </div>
+
+                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             <button onClick={() => startEditing(originalIndex, item)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="수정">
+                                                <Edit2 size={16}/>
+                                             </button>
+                                             <button onClick={() => removeFromFinal(item)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="삭제">
+                                                <Trash2 size={16}/>
+                                             </button>
+                                         </div>
+                                      </div>
+                                   );
+                                })
+                            )
                          )}
                       </div>
                    </div>

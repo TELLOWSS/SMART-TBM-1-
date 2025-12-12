@@ -1,13 +1,29 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2 } from 'lucide-react';
+import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2, Edit2, ListOrdered } from 'lucide-react';
 
 interface HistoryModalProps {
   onClose: () => void;
 }
 
 const milestones = [
+  {
+    version: 'v2.6.1',
+    date: '2025.12.08',
+    title: '팀 데이터 동기화 및 목록 확장',
+    desc: '11개 이상의 팀 등록 시 목록에서 누락되는 현상 수정. 대시보드 표시 개수 확장(10→30개) 및 팀 데이터 자동 동기화 로직 적용.',
+    icon: <ListOrdered size={18} />,
+    color: 'bg-cyan-500'
+  },
+  {
+    version: 'v2.6.0',
+    date: '2025.12.08',
+    title: '사용자 편의성 대폭 개선 (검색/수정)',
+    desc: '위험성평가 항목 검색 및 오타 수정 기능 탑재. TBM 안전 피드백 문구 직접 편집 기능 추가로 현장 대응력 강화.',
+    icon: <Edit2 size={18} />,
+    color: 'bg-green-500'
+  },
   {
     version: 'v2.5.5',
     date: '2025.12.07',

@@ -1,7 +1,8 @@
+
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TBMEntry } from '../types';
-import { Printer, X, Download, Loader2, Edit3, Trash2, Activity, Zap, Mic, Users, Shield, Sparkles, UserCheck } from 'lucide-react';
+import { Printer, X, Download, Loader2, Edit3, Trash2, Sparkles, UserCheck, AlertOctagon, Eye, Users } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -23,42 +24,123 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, onClose, signat
 
   const handleDownloadPDF = async () => {
     setIsGeneratingPdf(true);
+    
+    // 1. Create a "Ghost" container with EXACT A4 dimensions
+    const ghostContainer = document.createElement('div');
+    ghostContainer.id = 'pdf-ghost-container';
+    Object.assign(ghostContainer.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '794px', // A4 Width at 96 DPI
+        height: '1123px', // A4 Height at 96 DPI
+        zIndex: '-100',
+        background: '#ffffff',
+        visibility: 'visible',
+        overflow: 'hidden'
+    });
+    document.body.appendChild(ghostContainer);
+
     try {
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pages = document.querySelectorAll('.report-page');
+      const originalPages = document.querySelectorAll('.report-page');
 
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i] as HTMLElement;
-        
-        const canvas = await html2canvas(page, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          windowWidth: 794,
-          onclone: (clonedDoc) => {
-            const clonedPages = clonedDoc.querySelectorAll('.report-page');
-            clonedPages.forEach((p) => {
-              (p as HTMLElement).style.boxShadow = 'none';
-              (p as HTMLElement).style.margin = '0';
-              const editBtns = (p as HTMLElement).querySelectorAll('.edit-overlay');
-              editBtns.forEach((btn) => (btn as HTMLElement).style.display = 'none');
-            });
-          }
-        });
+      // Wait for fonts
+      await document.fonts.ready;
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const imgWidth = 210;
-        const imgHeight = 297;
+      for (let i = 0; i < originalPages.length; i++) {
+          const originalPage = originalPages[i] as HTMLElement;
+          const clone = originalPage.cloneNode(true) as HTMLElement;
 
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+          // Reset styles for capture
+          clone.style.margin = '0';
+          clone.style.boxShadow = 'none';
+          clone.style.transform = 'none';
+          clone.style.width = '794px';
+          clone.style.height = '1123px';
+          clone.style.position = 'relative';
+          
+          // Remove animations & interactive elements
+          const allElements = clone.querySelectorAll('*');
+          allElements.forEach((el) => {
+             const htmlEl = el as HTMLElement;
+             htmlEl.style.animation = 'none';
+             htmlEl.style.transition = 'none';
+          });
+
+          const uiElements = clone.querySelectorAll('.edit-overlay, .no-print-ui');
+          uiElements.forEach(el => el.remove());
+
+          // Fix SVG sizes
+          const clonedSvgs = clone.querySelectorAll('svg');
+          clonedSvgs.forEach((cSvg) => {
+             cSvg.style.display = 'inline-block';
+             cSvg.style.verticalAlign = 'middle';
+             if (!cSvg.getAttribute('width')) cSvg.setAttribute('width', '12px');
+             if (!cSvg.getAttribute('height')) cSvg.setAttribute('height', '12px');
+          });
+
+          ghostContainer.appendChild(clone);
+
+          // Wait for images to load
+          const images = Array.from(clone.querySelectorAll('img'));
+          await Promise.all(images.map(img => {
+              if (img.complete) return Promise.resolve();
+              return new Promise((resolve) => {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                  // Force resolve after timeout
+                  setTimeout(resolve, 1500);
+              });
+          }));
+          
+          // Small delay for layout stabilization
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          const canvas = await html2canvas(clone, {
+            scale: 2, 
+            useCORS: true,
+            logging: false,
+            width: 794,
+            height: 1123,
+            windowWidth: 794,
+            windowHeight: 1123,
+            scrollY: 0, 
+            scrollX: 0,
+            backgroundColor: '#ffffff',
+            onclone: (doc) => {
+               const style = doc.createElement('style');
+               style.innerHTML = `
+                  * { 
+                     -webkit-font-smoothing: antialiased !important; 
+                     text-rendering: optimizeLegibility !important;
+                     letter-spacing: 0px !important; 
+                     font-variant-ligatures: none !important;
+                  }
+               `;
+               doc.head.appendChild(style);
+            }
+          });
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const imgWidth = 210; // A4 width mm
+          const imgHeight = 297; // A4 height mm
+
+          if (i > 0) pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+          
+          ghostContainer.removeChild(clone);
       }
 
       pdf.save(`TBM_일지_${new Date().toISOString().slice(0,10)}.pdf`);
+
     } catch (error) {
       console.error("PDF generation failed", error);
-      alert("PDF 생성 중 오류가 발생했습니다. '인쇄' 버튼을 눌러 'PDF로 저장'을 시도해주세요.");
+      alert("PDF 생성 중 오류가 발생했습니다.");
     } finally {
+      if (document.body.contains(ghostContainer)) {
+          document.body.removeChild(ghostContainer);
+      }
       setIsGeneratingPdf(false);
     }
   };
@@ -76,98 +158,83 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, onClose, signat
     }
   };
 
-  // Helper to convert analysis enums to percentage for visualization
-  const getMetricPercentage = (type: string, value: any): number => {
-      if (type === 'participation') {
-          if (value === 'GOOD') return 100;
-          if (value === 'MODERATE') return 70;
-          return 40;
-      }
-      if (type === 'voice') {
-          if (value === 'CLEAR') return 100;
-          if (value === 'MUFFLED') return 50;
-          return 20;
-      }
-      if (type === 'ppe') {
-          return value === 'GOOD' ? 100 : 30;
-      }
-      if (type === 'interaction') {
-          return value ? 100 : 20;
-      }
-      return 50;
-  };
-
   return createPortal(
     <div className="fixed inset-0 bg-slate-900/95 z-50 overflow-y-auto flex flex-col items-center report-container-wrapper">
       <style>{`
         @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
         
+        /* Main Page Container - Strict Box Model */
         .report-page {
-          width: 210mm;
-          min-height: 297mm;
-          background: white;
-          margin: 0 auto 40px auto; 
-          box-shadow: 0 0 20px rgba(0,0,0,0.5);
-          box-sizing: border-box;
-          position: relative;
+            width: 794px;
+            height: 1123px;
+            background: white;
+            margin: 0 auto 40px auto;
+            position: relative;
+            font-family: "Pretendard", "Malgun Gothic", sans-serif;
+            color: black;
+            box-sizing: border-box;
+            border: 2px solid black; /* Outer Border */
+            display: block;
         }
+
+        /* Grid System for PDF Stability */
+        .row { display: flex; width: 100%; border-bottom: 1px solid black; box-sizing: border-box; }
+        .row.last { border-bottom: none; }
+        .col { border-right: 1px solid black; height: 100%; box-sizing: border-box; position: relative; }
+        .col.last { border-right: none; }
+        
+        /* Explicit Heights Strategy (Total 1119px inside border) */
+        .h-header { height: 130px; }
+        .h-info { height: 45px; }
+        .h-body { height: 908px; display: flex; flex-direction: column; } 
+        .h-footer { height: 36px; border-top: 1px solid black; display: flex; align-items: center; }
+        
+        /* Section Headers */
+        .section-header {
+            background-color: #f3f4f6; /* gray-100 */
+            border-bottom: 1px solid black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 800;
+            height: 30px;
+            color: black;
+        }
+
+        /* Body Internal Layout */
+        .body-row-images { height: 400px; border-bottom: 1px solid black; display: flex; width: 100%; }
+        .body-row-text { flex: 1; display: flex; width: 100%; } /* Fill remaining height */
+
+        /* Utilities */
+        .text-wrap-fix {
+           white-space: pre-wrap;
+           word-break: keep-all; /* Prevent word split */
+           line-height: 1.35;
+        }
+        
+        .report-page svg { display: inline-block; vertical-align: middle; }
 
         @media print {
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          
-          body, html {
-            margin: 0;
-            padding: 0;
-            background-color: white;
-          }
-
-          #root {
-            display: none !important;
-          }
-
+          @page { size: A4; margin: 0; }
+          body, html { margin: 0; padding: 0; background: white; }
+          #root { display: none !important; }
           .report-container-wrapper {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-            overflow: visible !important;
-            display: block !important;
-            z-index: 9999;
+            position: absolute !important; top: 0 !important; left: 0 !important;
+            width: 100% !important; height: auto !important;
+            margin: 0 !important; padding: 0 !important;
+            background: white !important; display: block !important;
           }
-
           .report-page {
-            margin: 0 !important;
-            box-shadow: none !important;
+            margin: 0 !important; box-shadow: none !important;
             page-break-after: always;
-            border: none !important;
-            width: 100% !important;
           }
-
-          .no-print-ui {
-            display: none !important;
-          }
-          
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
+          .no-print-ui { display: none !important; }
         }
-
-        .border-black { border-color: #000 !important; }
-        .text-black { color: #000 !important; }
-        .bg-gray-100 { background-color: #f1f5f9 !important; }
-        .bg-orange-50 { background-color: #fff7ed !important; }
-        .bg-blue-50 { background-color: #eff6ff !important; }
       `}</style>
-
-      <div className="sticky top-0 z-50 w-full bg-slate-800 text-white p-4 shadow-lg flex justify-between items-center max-w-[210mm] rounded-b-xl mb-8 no-print-ui">
+      
+      {/* Toolbar */}
+      <div className="sticky top-0 z-50 w-full bg-slate-800 text-white p-4 shadow-lg flex justify-between items-center max-w-[794px] rounded-b-xl mb-8 no-print-ui">
         <div>
           <h2 className="font-bold text-lg">🖨️ 보고서 센터</h2>
           <p className="text-xs text-slate-400">
@@ -200,259 +267,195 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, onClose, signat
 
       <div className="pb-20 print:pb-0">
         {entries.map((entry, index) => (
-          <div key={entry.id || index} className="report-page p-[10mm] flex flex-col font-['Pretendard'] group relative">
+          <div key={entry.id || index} className="report-page group">
             
-            <div className="flex border-2 border-black border-b-0 h-[35mm]">
-              <div className="flex-1 p-4 flex flex-col justify-center border-r border-black">
-                <div className="text-[11px] font-bold text-slate-600 mb-1">용인 푸르지오 원클러스터 2,3단지 현장</div>
-                <h1 className="text-3xl font-black text-black tracking-tight">일일 TBM 및 위험성평가 점검표</h1>
-                <div className="text-[11px] mt-2 font-medium text-slate-700">
-                  <span className="font-bold">일자:</span> {entry.date} ({entry.time}) <span className="mx-2 text-slate-300">|</span> <span className="font-bold">작성:</span> {entry.teamName}
+            {/* 1. Header Row */}
+            <div className="row h-header">
+                {/* Title Section */}
+                <div className="col" style={{width: '65%'}}>
+                    <div className="p-4 flex flex-col justify-center h-full">
+                        <div className="text-[10px] font-bold text-slate-500 mb-1">용인 푸르지오 원클러스터 2,3단지 현장</div>
+                        <h1 className="text-3xl font-black tracking-tighter mb-2 text-black">일일 TBM 및 위험성평가 점검표</h1>
+                         <div className="flex items-center text-[10px] font-bold gap-3 text-slate-700">
+                             <span>일자: {entry.date} ({entry.time})</span>
+                             <span className="w-px h-3 bg-slate-300"></span>
+                             <span>작성: {entry.teamName}</span>
+                         </div>
+                    </div>
                 </div>
-              </div>
-
-              <div className="w-[60mm] flex">
-                <div className="flex-1 flex flex-col border-r border-black">
-                  <div className="h-[25px] bg-gray-100 border-b border-black flex items-center justify-center text-[10px] font-extrabold text-black">
-                    안전 관리자
-                  </div>
-                  <div className="flex-1 relative cursor-pointer hover:bg-slate-50 group flex items-center justify-center">
-                    {signatures.safety ? (
-                      <img src={signatures.safety} alt="서명" className="max-w-[80%] max-h-[60px] object-contain" />
-                    ) : (
-                      <span className="text-slate-300 text-[9px] group-hover:text-blue-500">(서명)</span>
-                    )}
-                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer no-print-ui" onChange={handleSignatureUpload('safety')} />
-                  </div>
+                {/* Signatures Section */}
+                <div className="col last flex" style={{width: '35%'}}>
+                    <div className="col" style={{width: '50%'}}>
+                        <div className="section-header">안전 관리자</div>
+                        <div className="relative h-[calc(100%-30px)] flex items-center justify-center group cursor-pointer hover:bg-slate-50">
+                             {signatures.safety ? <img src={signatures.safety} className="max-w-[80%] max-h-[70px] object-contain"/> : <span className="text-slate-300 text-xs">(서명)</span>}
+                             <input type="file" className="absolute inset-0 opacity-0 cursor-pointer no-print-ui" onChange={handleSignatureUpload('safety')} />
+                        </div>
+                    </div>
+                    <div className="col last" style={{width: '50%'}}>
+                        <div className="section-header">현장 소장</div>
+                         <div className="relative h-[calc(100%-30px)] flex items-center justify-center group cursor-pointer hover:bg-slate-50">
+                             {signatures.site ? <img src={signatures.site} className="max-w-[80%] max-h-[70px] object-contain"/> : <span className="text-slate-300 text-xs">(서명)</span>}
+                             <input type="file" className="absolute inset-0 opacity-0 cursor-pointer no-print-ui" onChange={handleSignatureUpload('site')} />
+                        </div>
+                    </div>
                 </div>
-                <div className="flex-1 flex flex-col">
-                  <div className="h-[25px] bg-gray-100 border-b border-black flex items-center justify-center text-[10px] font-extrabold text-black">
-                    현장 소장
-                  </div>
-                  <div className="flex-1 relative cursor-pointer hover:bg-slate-50 group flex items-center justify-center">
-                    {signatures.site ? (
-                      <img src={signatures.site} alt="서명" className="max-w-[80%] max-h-[60px] object-contain" />
-                    ) : (
-                      <span className="text-slate-300 text-[9px] group-hover:text-blue-500">(서명)</span>
-                    )}
-                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer no-print-ui" onChange={handleSignatureUpload('site')} />
-                  </div>
-                </div>
-              </div>
             </div>
 
-            <div className="flex border-2 border-black border-b-0 text-xs">
-              <div className="w-[25mm] bg-white border-r border-black flex items-center justify-center font-extrabold h-[10mm]">작업 팀명</div>
-              <div className="flex-1 border-r border-black flex items-center justify-center font-bold text-black">{entry.teamName}</div>
-              <div className="w-[20mm] bg-white border-r border-black flex items-center justify-center font-extrabold">팀장</div>
-              <div className="w-[30mm] border-r border-black flex items-center justify-center font-bold text-black">{entry.leaderName}</div>
-              <div className="w-[20mm] bg-white border-r border-black flex items-center justify-center font-extrabold">금일 출력</div>
-              <div className="w-[20mm] flex items-center justify-center font-bold text-black">{entry.attendeesCount}명</div>
+            {/* 2. Info Row */}
+            <div className="row h-info text-xs">
+                <div className="col bg-slate-50 flex items-center justify-center font-extrabold text-black" style={{width: '12%'}}>작업 팀명</div>
+                <div className="col flex items-center justify-center font-bold text-black" style={{width: '23%'}}>{entry.teamName}</div>
+                <div className="col bg-slate-50 flex items-center justify-center font-extrabold text-black" style={{width: '10%'}}>팀장</div>
+                <div className="col flex items-center justify-center font-bold text-black" style={{width: '20%'}}>{entry.leaderName}</div>
+                <div className="col bg-slate-50 flex items-center justify-center font-extrabold text-black" style={{width: '15%'}}>금일 출력</div>
+                <div className="col last flex items-center justify-center font-bold text-black" style={{width: '20%'}}>{entry.attendeesCount}명</div>
             </div>
 
-            <div className="flex-1 border-2 border-black flex flex-col">
-              
-              <div className="flex-1 flex border-b-2 border-black min-h-0">
-                <div className="flex-1 border-r border-black flex flex-col">
-                  <div className="h-[30px] bg-gray-100 border-b border-black flex items-center justify-center text-[11px] font-extrabold text-black">
-                    1. TBM 일지 원본 (스캔)
-                  </div>
-                  <div className="flex-1 p-2 flex items-center justify-center overflow-hidden">
-                    {entry.originalLogImageUrl ? (
-                      <img src={entry.originalLogImageUrl} className="w-full h-full object-contain" alt="일지 원본" />
-                    ) : (
-                      <span className="text-slate-300 text-xs">이미지 없음</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex-1 flex flex-col">
-                  <div className="h-[30px] bg-gray-100 border-b border-black flex items-center justify-center text-[11px] font-extrabold text-black">
-                    2. TBM 실시 사진 및 동영상
-                  </div>
-                  <div className="flex-1 p-2 flex items-center justify-center overflow-hidden relative">
-                    {entry.tbmPhotoUrl ? (
-                       <div className="w-full h-full relative">
-                          <img src={entry.tbmPhotoUrl} className="w-full h-full object-contain" alt="TBM 실시" />
-                          {entry.tbmVideoUrl && (
-                             <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white flex justify-between items-center px-2 py-1.5 backdrop-blur-sm print:bg-black/70 print:text-white">
-                                <div className="flex items-center gap-2">
-                                   <span className="text-[10px] font-bold text-red-400 animate-pulse">●</span>
-                                   <span className="text-[9px] font-bold">동영상 증빙 서버 저장됨</span>
+            {/* 3. Main Body */}
+            <div className="h-body">
+                {/* 3-A. Images Row (Height reduced to 400px to save space for text) */}
+                <div className="body-row-images">
+                    <div className="col" style={{width: '50%'}}>
+                        <div className="section-header">1. TBM 일지 원본 (스캔)</div>
+                        <div className="h-[calc(100%-30px)] p-2 flex items-center justify-center">
+                            {entry.originalLogImageUrl ? <img src={entry.originalLogImageUrl} className="max-w-full max-h-full object-contain"/> : <span className="text-xs text-slate-300">이미지 없음</span>}
+                        </div>
+                    </div>
+                    <div className="col last" style={{width: '50%'}}>
+                        <div className="section-header">2. TBM 실시 사진 및 동영상</div>
+                        <div className="h-[calc(100%-30px)] p-2 flex items-center justify-center relative">
+                             {entry.tbmPhotoUrl ? (
+                                <div className="w-full h-full flex items-center justify-center relative">
+                                    <img src={entry.tbmPhotoUrl} className="max-w-full max-h-full object-contain"/>
+                                    {entry.tbmVideoUrl && (
+                                        <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 text-[8px] rounded flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> 동영상
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                   <span className="text-[8px] text-slate-300 max-w-[80px] truncate">{entry.tbmVideoFileName || 'Video_Evidence.mp4'}</span>
-                                </div>
-                             </div>
-                          )}
-                       </div>
-                    ) : (
-                      <span className="text-slate-300 text-xs">이미지 없음</span>
-                    )}
-                  </div>
+                             ) : <span className="text-xs text-slate-300">이미지 없음</span>}
+                        </div>
+                    </div>
                 </div>
-              </div>
-
-              <div className="flex-1 flex min-h-0">
-                <div className="flex-1 border-r border-black flex flex-col">
-                  <div className="h-[30px] bg-gray-100 border-b border-black flex items-center justify-center text-[11px] font-extrabold text-black">
-                    3. 금일 작업 내용 및 위험요인
-                  </div>
-                  <div className="flex-1 p-4 flex flex-col">
-                    <div className="mb-4">
-                      <div className="text-[11px] font-extrabold text-slate-800 mb-1">[작업 내용]</div>
-                      <div className="text-[12px] leading-relaxed font-medium whitespace-pre-wrap text-black">
-                        {entry.workDescription || <span className="text-red-400 bg-red-50 px-2 py-0.5 rounded">⚠️ 내용이 비어있습니다.</span>}
-                      </div>
+                
+                {/* 3-B. Text Content Row (Expanded) */}
+                <div className="body-row-text">
+                    {/* Left: Work & Risk */}
+                    <div className="col flex flex-col" style={{width: '50%'}}>
+                        <div className="section-header">3. 금일 작업 내용 및 위험요인</div>
+                        <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden">
+                            {/* Work Desc */}
+                            <div>
+                                <div className="text-[11px] font-extrabold text-slate-800 mb-1 border-b border-slate-200 inline-block pb-0.5">[작업 내용]</div>
+                                <div className="text-[11px] leading-relaxed text-wrap-fix text-black min-h-[50px]">
+                                    {entry.workDescription || "내용 없음"}
+                                </div>
+                            </div>
+                            
+                            {/* Risks */}
+                            <div className="flex-1 border border-orange-300 rounded flex flex-col min-h-0">
+                                <div className="bg-orange-50 p-1.5 text-center text-[10px] font-bold text-orange-700 border-b border-orange-200">⚠ 중점 위험 관리 사항</div>
+                                <div className="p-2 space-y-3 overflow-hidden">
+                                    {(entry.riskFactors || []).slice(0,5).map((risk, i) => (
+                                        <div key={i} className="text-[10px]">
+                                            <div className="flex gap-1.5 mb-0.5 items-start">
+                                                <span className="bg-red-100 text-red-600 border border-red-200 px-1.5 rounded text-[9px] font-bold shrink-0 mt-0.5">위험</span>
+                                                <span className="text-wrap-fix leading-tight text-black">{risk.risk}</span>
+                                            </div>
+                                            <div className="flex gap-1.5 items-start">
+                                                <span className="bg-blue-100 text-blue-600 border border-blue-200 px-1.5 rounded text-[9px] font-bold shrink-0 mt-0.5">대책</span>
+                                                <span className="text-wrap-fix leading-tight text-black">{risk.measure}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!entry.riskFactors || entry.riskFactors.length === 0) && <div className="text-center text-[10px] text-slate-300 py-4">항목 없음</div>}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div className="mt-auto border-2 border-orange-400 rounded p-0 overflow-hidden">
-                       <div className="bg-orange-50 border-b border-orange-300 border-dashed px-2 py-1.5 flex items-center gap-2">
-                          <span className="text-[10px] font-extrabold text-orange-700">⚠ 중점 위험 관리 사항</span>
-                       </div>
-                       <div className="p-2 space-y-2">
-                          {(entry.riskFactors || []).length > 0 ? (
-                            entry.riskFactors!.slice(0, 4).map((risk, rIdx) => (
-                              <div key={rIdx} className="text-[10px]">
-                                 <div className="flex items-start gap-1 mb-0.5">
-                                    <span className="inline-block bg-red-100 text-red-600 border border-red-200 px-1 rounded-[2px] font-bold min-w-[28px] text-center leading-[1.2]">위험</span>
-                                    <span className="text-black leading-[1.2]">{risk.risk}</span>
-                                 </div>
-                                 <div className="flex items-start gap-1">
-                                    <span className="inline-block bg-blue-100 text-blue-600 border border-blue-200 px-1 rounded-[2px] font-bold min-w-[28px] text-center leading-[1.2]">대책</span>
-                                    <span className="text-black leading-[1.2]">{risk.measure}</span>
-                                 </div>
-                              </div>
-                            ))
-                          ) : (
-                             <div className="text-[10px] text-slate-400 text-center py-2">특이사항 없음</div>
-                          )}
-                       </div>
+                    {/* Right: AI Insight */}
+                    <div className="col last flex flex-col" style={{width: '50%'}}>
+                         <div className="section-header">4. AI Deep Insight (심층 정밀 진단)</div>
+                         <div className="flex-1 flex flex-col overflow-hidden">
+                            {/* AI Score Box */}
+                            <div className="p-4 border-b border-black bg-slate-50/50">
+                                {entry.videoAnalysis ? (
+                                    <>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="flex items-center gap-1.5">
+                                            <Sparkles size={14} className="text-violet-600"/>
+                                            <span className="text-[11px] font-bold text-black">AI TBM Quality Score</span>
+                                        </div>
+                                        <span className="text-sm font-black text-violet-600 border border-violet-200 bg-white px-2 py-0.5 rounded shadow-sm">{entry.videoAnalysis.score}점</span>
+                                    </div>
+                                    
+                                    {/* Stats Grid */}
+                                    <div className="flex gap-2 mb-3">
+                                        <div className="flex-1 bg-white border border-slate-200 rounded p-1.5 flex items-center gap-1.5">
+                                            <Eye size={12} className="text-slate-400"/>
+                                            <span className="text-[10px] font-bold text-slate-600">집중도: {entry.videoAnalysis.focusAnalysis?.overall || 0}%</span>
+                                        </div>
+                                        <div className="flex-1 bg-white border border-slate-200 rounded p-1.5 flex items-center gap-1.5">
+                                            <Users size={12} className="text-slate-400"/>
+                                            <span className="text-[10px] font-bold text-slate-600">산만: {entry.videoAnalysis.focusAnalysis?.distractedCount || 0}명</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Blind Spot Alert */}
+                                    {entry.videoAnalysis.insight?.missingTopics?.length > 0 && (
+                                        <div className="bg-orange-50 border border-orange-200 rounded p-2 mb-3">
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <AlertOctagon size={12} className="text-orange-600"/>
+                                                <span className="text-[10px] font-bold text-orange-700">Blind Spot (누락 위험)</span>
+                                            </div>
+                                            <p className="text-[10px] text-orange-900 leading-tight text-wrap-fix">
+                                                {entry.videoAnalysis.insight.missingTopics.join(', ')}
+                                            </p>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="text-[10px] text-slate-700 font-medium leading-relaxed bg-white p-2.5 rounded border border-slate-200 text-wrap-fix italic border-l-4 border-l-violet-400">
+                                        "{entry.videoAnalysis.evaluation}"
+                                    </div>
+                                    </>
+                                ) : (
+                                    <div className="text-center py-6 text-[10px] text-slate-400">AI 분석 데이터 없음</div>
+                                )}
+                            </div>
+                            
+                            {/* Safety Manager Feedback */}
+                            <div className="flex-1 p-4 bg-white">
+                                <div className="text-[11px] font-extrabold text-black mb-2 border-b border-slate-200 pb-1 flex items-center gap-1">
+                                    <UserCheck size={12}/> 안전관리자 코멘트
+                                </div>
+                                <div className="space-y-2">
+                                    {(entry.safetyFeedback || []).slice(0,5).map((fb, i) => (
+                                        <div key={i} className="flex gap-2 items-start">
+                                            <span className="text-blue-600 text-[10px] mt-0.5 font-bold">✔</span>
+                                            <span className="text-[10px] text-black leading-snug text-wrap-fix">{fb}</span>
+                                        </div>
+                                    ))}
+                                    {(!entry.safetyFeedback || entry.safetyFeedback.length === 0) && <div className="text-center text-[10px] text-slate-300 py-4">코멘트 없음</div>}
+                                </div>
+                            </div>
+                         </div>
                     </div>
-                  </div>
                 </div>
-
-                {/* 4. Split Section: AI Quantitative Audit + Safety Manager Feedback */}
-                <div className="flex-1 flex flex-col">
-                  <div className="h-[30px] bg-gray-100 border-b border-black flex items-center justify-center text-[11px] font-extrabold text-black">
-                    4. AI 정밀 진단 및 관리자 피드백
-                  </div>
-                  <div className="flex-1 flex flex-col">
-                     
-                     {/* 4-A: AI Quantitative Analysis */}
-                     {entry.videoAnalysis ? (
-                       <div className="p-3 border-b border-black bg-slate-50">
-                          <div className="flex justify-between items-center mb-2">
-                             <div className="flex items-center gap-1.5">
-                                <Sparkles size={12} className="text-violet-600"/>
-                                <span className="text-[10px] font-black text-slate-800">AI Deep Learning Audit</span>
-                             </div>
-                             <div className="text-[12px] font-black text-violet-600 border border-violet-200 bg-white px-2 py-0.5 rounded">
-                                종합 {entry.videoAnalysis.score}점
-                             </div>
-                          </div>
-                          
-                          {/* Quantitative Bars */}
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-2">
-                             <div>
-                                <div className="flex justify-between text-[8px] font-bold text-slate-500 mb-0.5">
-                                   <span>참여도 (Participation)</span>
-                                   <span>{getMetricPercentage('participation', entry.videoAnalysis.details.participation)}%</span>
-                                </div>
-                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                   <div className="h-full bg-blue-500" style={{ width: `${getMetricPercentage('participation', entry.videoAnalysis.details.participation)}%` }}></div>
-                                </div>
-                             </div>
-                             <div>
-                                <div className="flex justify-between text-[8px] font-bold text-slate-500 mb-0.5">
-                                   <span>음성 명확도 (Voice)</span>
-                                   <span>{getMetricPercentage('voice', entry.videoAnalysis.details.voiceClarity)}%</span>
-                                </div>
-                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                   <div className="h-full bg-green-500" style={{ width: `${getMetricPercentage('voice', entry.videoAnalysis.details.voiceClarity)}%` }}></div>
-                                </div>
-                             </div>
-                             <div>
-                                <div className="flex justify-between text-[8px] font-bold text-slate-500 mb-0.5">
-                                   <span>보호구 착용 (PPE)</span>
-                                   <span>{getMetricPercentage('ppe', entry.videoAnalysis.details.ppeStatus)}%</span>
-                                </div>
-                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                   <div className="h-full bg-orange-500" style={{ width: `${getMetricPercentage('ppe', entry.videoAnalysis.details.ppeStatus)}%` }}></div>
-                                </div>
-                             </div>
-                             <div>
-                                <div className="flex justify-between text-[8px] font-bold text-slate-500 mb-0.5">
-                                   <span>상호작용 (Interaction)</span>
-                                   <span>{getMetricPercentage('interaction', entry.videoAnalysis.details.interaction)}%</span>
-                                </div>
-                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                   <div className="h-full bg-violet-500" style={{ width: `${getMetricPercentage('interaction', entry.videoAnalysis.details.interaction)}%` }}></div>
-                                </div>
-                             </div>
-                          </div>
-                          <p className="text-[9px] text-slate-600 font-medium leading-tight border-l-2 border-violet-300 pl-2">
-                             "{entry.videoAnalysis.evaluation}"
-                          </p>
-                       </div>
-                     ) : (
-                       <div className="p-3 border-b border-black bg-slate-50 flex flex-col items-center justify-center text-slate-400 min-h-[80px]">
-                          <span className="text-[10px] font-bold">AI 정밀 분석 데이터 없음</span>
-                          <span className="text-[9px]">(동영상 미첨부 또는 분석 미실시)</span>
-                       </div>
-                     )}
-
-                     {/* 4-B: Safety Manager Feedback */}
-                     <div className="flex-1 p-3 bg-white">
-                        <div className="text-[10px] font-extrabold text-slate-800 mb-2 flex items-center gap-1">
-                           <UserCheck size={12}/> 안전관리자 코멘트
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                           {entry.safetyFeedback && entry.safetyFeedback.length > 0 ? (
-                              entry.safetyFeedback.slice(0, 3).map((fb, fIdx) => (
-                                 <div key={fIdx} className="flex items-start gap-2 text-[10px]">
-                                    <span className="text-blue-600 mt-[1px]">✔</span>
-                                    <span className="font-medium text-slate-800 leading-snug">
-                                       {(fb || '').replace('[월간중점누락]', '')}
-                                    </span>
-                                 </div>
-                              ))
-                           ) : (
-                              <span className="text-[10px] text-slate-400">- 별도 지적사항 없음 -</span>
-                           )}
-                        </div>
-                     </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            <div className="h-[8mm] mt-[1mm] flex justify-between items-end border-t border-black text-[9px] text-slate-500 font-mono">
-               <div>DOC-NO: TBM-{(entry.date || '').replace(/-/g,'')}-{index+1} (REV.0)</div>
-               <div className="font-bold text-slate-600">(주)휘강건설 스마트 안전관리 시스템</div>
-               <div>Page {index + 1} / {entries.length}</div>
+            {/* 4. Footer Row */}
+            <div className="h-footer flex justify-between items-center px-4 text-[9px] text-slate-500 font-mono">
+                 <div>DOC-NO: TBM-{entry.date.replace(/-/g,'')}-{index+1} (REV.0)</div>
+                 <div className="font-bold text-slate-700">(주)휘강건설 스마트 안전관리 시스템</div>
+                 <div>Page {index + 1} / {entries.length}</div>
             </div>
-
-            <div className="edit-overlay absolute top-0 right-0 p-4 no-print-ui z-[100] flex gap-2 pointer-events-auto">
-                <button 
-                  onClick={(e) => {
-                     e.preventDefault();
-                     e.stopPropagation();
-                     onEdit(entry);
-                  }}
-                  className="bg-white text-blue-600 px-3 py-1.5 rounded-lg font-bold shadow-lg border border-blue-200 flex items-center gap-1 hover:bg-blue-600 hover:text-white transition-colors text-xs cursor-pointer active:scale-95"
-                >
-                  <Edit3 size={14} className="pointer-events-none" /> 수정
-                </button>
-                <button 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onDelete(String(entry.id)); 
-                  }}
-                  className="bg-white text-red-600 px-3 py-1.5 rounded-lg font-bold shadow-lg border border-red-200 flex items-center gap-1 hover:bg-red-600 hover:text-white transition-colors text-xs cursor-pointer active:scale-95"
-                >
-                  <Trash2 size={14} className="pointer-events-none" /> 삭제
-                </button>
+            
+            {/* Edit Controls */}
+            <div className="edit-overlay absolute top-0 right-0 p-4 no-print-ui z-[100] flex gap-2">
+                <button onClick={() => onEdit(entry)} className="bg-white text-blue-600 p-2 rounded shadow border hover:bg-blue-50 hover:border-blue-300 transition-colors"><Edit3 size={16}/></button>
+                <button onClick={() => onDelete(String(entry.id))} className="bg-white text-red-600 p-2 rounded shadow border hover:bg-red-50 hover:border-red-300 transition-colors"><Trash2 size={16}/></button>
             </div>
 
           </div>

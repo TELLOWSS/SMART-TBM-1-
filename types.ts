@@ -33,16 +33,37 @@ export interface MonthlyRiskAssessment {
   createdAt: number;
 }
 
-// New: Video Quality Analysis Result
+// [UPDATED] Deep Insight Analysis Result
 export interface TBMAnalysisResult {
   score: number; // 0 to 100
   evaluation: string; // One line summary
+  
+  // Basic Metrics
   details: {
     participation: 'GOOD' | 'BAD' | 'MODERATE';
     voiceClarity: 'CLEAR' | 'MUFFLED' | 'NONE';
     ppeStatus: 'GOOD' | 'BAD';
-    interaction: boolean; // Point & Call, Slogans
+    interaction: boolean; 
   };
+
+  // [NEW] Feature 3: Worker Focus Check (Zone-based Heatmap Data)
+  focusAnalysis: {
+    overall: number; // 0-100 score
+    distractedCount: number; // Number of distracted workers detected
+    focusZones: {
+      front: 'HIGH' | 'LOW';
+      back: 'HIGH' | 'LOW';
+      side: 'HIGH' | 'LOW';
+    };
+  };
+
+  // [NEW] Feature 2: TBM Bias Analyst (Blind Spots)
+  insight: {
+    mentionedTopics: string[]; // Topics actually discussed
+    missingTopics: string[]; // Critical topics missed (Blind Spots)
+    suggestion: string; // Actionable coaching advice
+  };
+
   feedback: string[]; // Specific feedback points
 }
 

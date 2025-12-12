@@ -13,82 +13,148 @@ export interface ExtractedPriority {
 
 export interface MonthlyExtractionResult {
   items: ExtractedPriority[];
-  detectedMonth?: string; // YYYY-MM format if found
+  detectedMonth?: string;
 }
 
-// [NEW] Evaluate TBM Video Quality
-export const evaluateTBMVideo = async (base64Video: string, mimeType: string): Promise<TBMAnalysisResult> => {
+// [UPDATED] Deep Insight TBM Video Evaluation
+export const evaluateTBMVideo = async (base64Video: string, mimeType: string, workDescription?: string): Promise<TBMAnalysisResult> => {
   try {
+    // Simplify MIME type to generic video/webm if it's complex
+    // This helps avoid codec mismatch errors on the API side
+    let cleanMimeType = 'video/webm'; 
+    if (mimeType.includes('mp4')) cleanMimeType = 'video/mp4';
+
+    console.log(`Sending video to Gemini (Safe Mode): ${cleanMimeType}`);
+
+    const workContext = workDescription ? `작업 내용: "${workDescription}"` : "작업 내용: 일반 골조 공사";
+
+    // Updated Prompt: Explicitly handle silent video & Force Korean Output
     const prompt = `
-      당신은 건설 현장 안전 감사관(Safety Auditor)입니다.
-      제공된 TBM(Tool Box Meeting) 동영상을 분석하여 해당 팀이 TBM을 제대로 수행했는지 평가하십시오.
+      역할: 당신은 한국 건설 현장의 20년차 베테랑 안전 전문가입니다.
+      임무: 제공된 10초 분량의 [무음(Silent)] TBM 영상을 시각적으로 정밀 분석하여, **반드시 한국어(Korean)**로 안전 점검 리포트를 작성하십시오.
       
-      [평가 기준]
-      1. 참여도 (participation): 작업자들이 모여서 리더를 바라보고 경청하는가?
-      2. 목소리 명확성 (voiceClarity): 리더가 작업 내용과 위험 요인을 명확히 말하는가? (소음이 심하거나 목소리가 없으면 감점)
-      3. 보호구 상태 (ppeStatus): 참석자들이 안전모, 조끼 등을 착용했는가?
-      4. 상호작용 (interaction): '지적확인', '구호 제창', '스트레칭', '대답' 등 능동적인 행동이 있는가?
-      
-      [채점 방식 (Score 0~100)]
-      - 기본 점수 50점에서 시작.
-      - 위 4가지 항목이 양호할 때마다 점수 추가.
-      - 형식적인 촬영(아무 말 없이 서있기만 함)일 경우 50점 미만 부여.
-      
-      응답은 반드시 JSON 형식으로 반환하십시오.
+      [분석 목표]
+      1. Worker Focus (집중도): 작업자들의 시선 처리, 딴짓 여부, 리더를 향한 주목도를 파악하십시오.
+      2. Safety Check (안전 상태): 안전모 턱끈 체결, 보호구 착용 상태, 복장 불량을 찾아내십시오.
+      3. Leader (리더십): (소리가 없으므로) 리더의 제스처, 지시하는 손동작의 명확성을 보고 '활발함'을 추정하십시오.
+
+      ${workContext}
+
+      [출력 규칙 - ⚠️ 모든 텍스트는 한국어로 작성하십시오]
+      1. evaluation (종합 평가): 작업자들의 전반적인 태도와 분위기를 한국어로 구체적으로 서술하십시오. (예: "작업자들의 시선이 리더에게 집중되어 있으며, 보호구 착용 상태가 매우 모범적입니다.")
+      2. insight.missingTopics (누락 위험): 영상 내 작업 환경을 볼 때, TBM에서 반드시 언급했어야 하는데 누락된 것으로 보이는 '잠재적 위험'을 한국어로 지적하십시오. (예: "고소 작업 시 추락 방지 대책", "신호수 배치 확인")
+      3. insight.suggestion (AI 제안): 이를 해결하기 위한 구체적인 코칭 멘트를 한국어로 작성하십시오.
+      4. feedback: 관리자에게 주는 3가지 핵심 조언을 한국어로 작성하십시오.
+
+      JSON 형식으로 응답하십시오.
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // Supports Video
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: base64Video } },
-          { text: prompt }
-        ]
-      },
+      model: "gemini-2.5-flash", 
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: cleanMimeType, data: base64Video } },
+            { text: prompt }
+          ]
+        }
+      ],
       config: {
         responseMimeType: "application/json",
+        // Relaxed Schema: Removed strict ENUMs to prevent 400 Errors on validation
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-             score: { type: Type.INTEGER, description: "0~100 사이의 TBM 수행 품질 점수" },
-             evaluation: { type: Type.STRING, description: "전체적인 총평 (한 줄 요약)" },
+             score: { type: Type.INTEGER },
+             evaluation: { type: Type.STRING },
              details: {
                type: Type.OBJECT,
                properties: {
-                 participation: { type: Type.STRING, enum: ["GOOD", "BAD", "MODERATE"] },
-                 voiceClarity: { type: Type.STRING, enum: ["CLEAR", "MUFFLED", "NONE"] },
-                 ppeStatus: { type: Type.STRING, enum: ["GOOD", "BAD"] },
-                 interaction: { type: Type.BOOLEAN, description: "구호 제창, 지적확인 등 상호작용 여부" }
+                 participation: { type: Type.STRING }, // GOOD, BAD, MODERATE
+                 voiceClarity: { type: Type.STRING },  // CLEAR, MUFFLED, NONE
+                 ppeStatus: { type: Type.STRING },     // GOOD, BAD
+                 interaction: { type: Type.BOOLEAN }
                }
+             },
+             focusAnalysis: {
+                type: Type.OBJECT,
+                properties: {
+                    overall: { type: Type.INTEGER },
+                    distractedCount: { type: Type.INTEGER },
+                    focusZones: {
+                        type: Type.OBJECT,
+                        properties: {
+                            front: { type: Type.STRING }, // HIGH, LOW
+                            back: { type: Type.STRING },
+                            side: { type: Type.STRING }
+                        }
+                    }
+                }
+             },
+             insight: {
+                 type: Type.OBJECT,
+                 properties: {
+                     mentionedTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                     missingTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                     suggestion: { type: Type.STRING }
+                 }
              },
              feedback: {
                type: Type.ARRAY,
-               items: { type: Type.STRING, description: "개선해야 할 점 또는 칭찬할 점 (3가지)" }
+               items: { type: Type.STRING }
              }
-          },
-          required: ["score", "evaluation", "details", "feedback"]
+          }
         },
       },
     });
 
     if (response.text) {
-      return JSON.parse(response.text) as TBMAnalysisResult;
+      const raw = JSON.parse(response.text);
+      // Normalize data to match Typescript interfaces strictly after receiving
+      return {
+          score: raw.score || 0,
+          evaluation: raw.evaluation || "분석 완료",
+          details: {
+              participation: (raw.details?.participation || 'MODERATE') as any,
+              voiceClarity: (raw.details?.voiceClarity || 'MUFFLED') as any,
+              ppeStatus: (raw.details?.ppeStatus || 'GOOD') as any,
+              interaction: !!raw.details?.interaction
+          },
+          focusAnalysis: {
+              overall: raw.focusAnalysis?.overall || 0,
+              distractedCount: raw.focusAnalysis?.distractedCount || 0,
+              focusZones: {
+                  front: (raw.focusAnalysis?.focusZones?.front || 'HIGH') as any,
+                  back: (raw.focusAnalysis?.focusZones?.back || 'HIGH') as any,
+                  side: (raw.focusAnalysis?.focusZones?.side || 'HIGH') as any
+              }
+          },
+          insight: {
+              mentionedTopics: raw.insight?.mentionedTopics || [],
+              missingTopics: raw.insight?.missingTopics || [],
+              suggestion: raw.insight?.suggestion || "안전 수칙을 준수하세요."
+          },
+          feedback: raw.feedback || []
+      };
     }
     throw new Error("No response text");
 
   } catch (error: any) {
-    console.error("Gemini Video Analysis Error:", error);
-    // Return default/error result
+    console.error("Gemini Insight Error:", error);
+    // Graceful Error Handling
     return {
       score: 0,
-      evaluation: "AI 분석 서버 연결 실패 또는 파일이 너무 큽니다.",
-      details: { participation: 'MODERATE', voiceClarity: 'MUFFLED', ppeStatus: 'GOOD', interaction: false },
-      feedback: ["동영상 용량을 줄여서 다시 시도해주세요.", "네트워크 상태를 확인해주세요."]
+      evaluation: "영상 형식 문제로 분석 실패 (Code: 400). 다시 시도해주세요.",
+      details: { participation: 'MODERATE', voiceClarity: 'NONE', ppeStatus: 'GOOD', interaction: false },
+      focusAnalysis: { overall: 0, distractedCount: 0, focusZones: { front: 'LOW', back: 'LOW', side: 'LOW' } },
+      insight: { mentionedTopics: [], missingTopics: [], suggestion: "재촬영 권장" },
+      feedback: ["네트워크 상태 확인 필요"]
     };
   }
 };
 
-// 월간 위험성평가표에서 핵심 사항, 등급, 그리고 공종(Category) 추출
+// ... (Rest of the file remains unchanged: extractMonthlyPriorities, analyzeTBMLog)
 export const extractMonthlyPriorities = async (base64Data: string, mimeType: string): Promise<MonthlyExtractionResult> => {
   try {
     const prompt = `
@@ -132,12 +198,15 @@ export const extractMonthlyPriorities = async (base64Data: string, mimeType: str
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: base64Data } },
-          { text: prompt }
-        ]
-      },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: mimeType, data: base64Data } },
+            { text: prompt }
+          ]
+        }
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -168,12 +237,9 @@ export const extractMonthlyPriorities = async (base64Data: string, mimeType: str
     return { items: [] };
   } catch (error: any) {
     console.error("Gemini Monthly Analysis Error:", error);
-    
-    // [SAFETY NET] Catch RPC/Network errors gracefully
     if (error.message?.includes('Rpc failed') || error.status === 500) {
         alert("구글 AI 서버 연결 불안정(Network Error). 잠시 후 다시 시도해주세요.");
     }
-    
     return { items: [{ content: "분석 서버 연결 실패 (직접 입력 권장)", level: "GENERAL", category: "공통" }] };
   }
 };
@@ -247,12 +313,15 @@ export const analyzeTBMLog = async (
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: base64Data } },
-          { text: prompt }
-        ]
-      },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: mimeType, data: base64Data } },
+            { text: prompt }
+          ]
+        }
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -295,12 +364,9 @@ export const analyzeTBMLog = async (
     throw new Error("No response text");
   } catch (error: any) {
     console.error("Gemini Vision Error:", error);
-    
-    // [SAFETY NET] Prevent App Crash
     if (error.message?.includes('Rpc failed') || error.status === 500) {
        alert("AI 분석 서버 응답 없음(Timeout). 잠시 후 다시 시도하거나 직접 입력해주세요.");
     }
-    
     return {
       teamName: targetTeamName || '',
       leaderName: '',

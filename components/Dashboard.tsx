@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TBMEntry } from '../types';
-import { Calendar, Users, AlertCircle, FileText, Camera, BarChart2, CheckCircle2, TrendingUp, ChevronRight, Edit2, ShieldAlert, BookOpen, Quote, Database, Trash2, X, ScanLine, Server, Lock, Sparkles, BrainCircuit, MessageSquare, ArrowRight, ShieldCheck, Activity, Zap, Clock, MoreHorizontal, Plus, Eye, Mic, HandMetal, UserCheck, PlayCircle } from 'lucide-react';
+import { Calendar, Users, AlertCircle, FileText, Camera, BarChart2, CheckCircle2, TrendingUp, ChevronRight, Edit2, ShieldAlert, BookOpen, Quote, Database, Trash2, X, ScanLine, Server, Lock, Sparkles, BrainCircuit, MessageSquare, ArrowRight, ShieldCheck, Activity, Zap, Clock, MoreHorizontal, Plus, Eye, Mic, HandMetal, UserCheck, PlayCircle, Globe, Languages, Target, Radar } from 'lucide-react';
 
 interface DashboardProps {
   entries: TBMEntry[];
@@ -16,7 +16,7 @@ interface DashboardProps {
 
 // --- Feature Showcase Component (Modal) ---
 interface FeatureShowcaseProps {
-   featureKey: 'risk' | 'proof' | 'feedback' | 'audit';
+   featureKey: 'risk' | 'proof' | 'feedback' | 'audit' | 'insight';
    onClose: () => void;
 }
 
@@ -69,6 +69,18 @@ const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({ featureKey, onClose }
             { icon: <ScanLine size={24} className="animate-pulse"/>, text: "Vision AI 동작/음성 인식" },
             { icon: <Sparkles size={24}/>, text: "품질 점수 및 리포트 생성" }
          ]
+      },
+      insight: {
+         title: "AI 심층 정밀 진단 (Deep Insight)",
+         subtitle: "AI Deep Learning Insight",
+         color: "text-indigo-500",
+         bgGradient: "from-indigo-500/20 to-violet-500/5",
+         description: "관리자가 놓친 '사각지대'와 근로자의 '숨겨진 집중도'를 찾아냅니다. TBM의 내용(Bias)과 태도(Attitude)를 심층 분석합니다.",
+         steps: [
+            { icon: <Target size={24}/>, text: "Blind Spot(누락된 위험) 탐지" },
+            { icon: <Eye size={24} className="animate-pulse"/>, text: "구역별 집중도 Heatmap 분석" },
+            { icon: <Radar size={24}/>, text: "초개인화된 개선 코칭 제공" }
+         ]
       }
    }[featureKey];
 
@@ -111,7 +123,7 @@ const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({ featureKey, onClose }
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onNavigateToReports, onNewEntry, onEdit, onOpenSettings, onDelete }) => {
-  const [activeFeature, setActiveFeature] = useState<'risk' | 'proof' | 'feedback' | 'audit' | null>(null);
+  const [activeFeature, setActiveFeature] = useState<'risk' | 'proof' | 'feedback' | 'audit' | 'insight' | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
   const todaysEntries = entries.filter(e => e.date === today);
@@ -172,10 +184,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
       {activeFeature && <FeatureShowcase featureKey={activeFeature} onClose={() => setActiveFeature(null)} />}
 
       {/* --- HERO SECTION: Bento Grid Top Row --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-auto lg:h-[280px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-auto">
          
          {/* 1. Main Command Center (Dark Theme) - Spans 8 cols */}
-         <div className="lg:col-span-8 bg-[#0F172A] rounded-[1.5rem] p-8 relative overflow-hidden shadow-2xl flex flex-col justify-between group border border-slate-800">
+         <div className="lg:col-span-8 bg-[#0F172A] rounded-[1.5rem] p-8 relative overflow-hidden shadow-2xl flex flex-col justify-between group border border-slate-800 min-h-[300px]">
             {/* Ambient Background Effects */}
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
             <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-emerald-500/10 rounded-full blur-[60px] translate-y-1/3 -translate-x-1/3 pointer-events-none"></div>
@@ -246,11 +258,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
                      <p className="text-xs font-bold text-slate-200">AI 품질 진단</p>
                   </div>
                </button>
+
+               {/* 5th Feature: Deep Insight (Replaced Global TBM) */}
+               <button onClick={() => setActiveFeature('insight')} className="flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-indigo-900/20 hover:border-indigo-500/30 transition-all group backdrop-blur-sm">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                     <Target size={16} />
+                  </div>
+                  <div className="text-left">
+                     <p className="text-[10px] text-slate-400 font-bold uppercase">AI Insight</p>
+                     <p className="text-xs font-bold text-slate-200">심층 정밀 진단</p>
+                  </div>
+               </button>
             </div>
          </div>
 
          {/* 2. Legal Compliance Card - Spans 4 cols */}
-         <div className="lg:col-span-4 bg-white rounded-[1.5rem] p-6 border border-slate-200 shadow-lg relative overflow-hidden flex flex-col group">
+         <div className="lg:col-span-4 bg-white rounded-[1.5rem] p-6 border border-slate-200 shadow-lg relative overflow-hidden flex flex-col group min-h-[300px]">
             <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl translate-x-10 -translate-y-10 pointer-events-none"></div>
             
             <div className="flex items-center justify-between mb-4">
@@ -441,7 +464,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
             </div>
          </div>
 
-         {/* Right: Recent Activity List */}
+         {/* Right: Recent Activity List (LIMIT INCREASED TO 30) */}
          <div className="bg-white rounded-[1.5rem] flex flex-col border border-slate-200 shadow-sm overflow-hidden h-[500px] lg:h-auto animate-slide-up delay-300">
             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
                <div>
@@ -464,7 +487,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
                      <span className="text-sm font-bold">등록된 활동이 없습니다.</span>
                   </div>
                ) : (
-                  entries.slice(0, 10).map((entry, idx) => (
+                  entries.slice(0, 30).map((entry, idx) => (
                      <div key={entry.id || idx} className="group relative bg-white p-4 rounded-xl border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all duration-300">
                         {/* Timeline Connector */}
                         {idx !== entries.length - 1 && (

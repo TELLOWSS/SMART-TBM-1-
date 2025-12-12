@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { TBMEntry, RiskAssessmentItem, SafetyGuideline, TeamOption, TBMAnalysisResult } from '../types';
 import { analyzeTBMLog, evaluateTBMVideo } from '../services/geminiService';
 import { compressVideo } from '../utils/videoUtils';
-import { Upload, Camera, Sparkles, AlertTriangle, CheckCircle2, Loader2, FileText, X, ShieldCheck, Layers, ArrowLeft, Trash2, Film, Save, ZoomIn, ZoomOut, Maximize, Minimize, RotateCw, Clock, Plus, Check, PlayCircle, BarChart, Mic, Volume2, Edit2, RefreshCcw } from 'lucide-react';
+import { Upload, Camera, Sparkles, AlertTriangle, CheckCircle2, Loader2, FileText, X, ShieldCheck, Layers, ArrowLeft, Trash2, Film, Save, ZoomIn, ZoomOut, Maximize, Minimize, RotateCw, Clock, Plus, Check, PlayCircle, BarChart, Mic, Volume2, Edit2, RefreshCcw, Target, Eye, AlertOctagon, UserCheck } from 'lucide-react';
 
 interface TBMFormProps {
   onSave: (entry: TBMEntry, shouldExit?: boolean) => void;
@@ -75,6 +75,10 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
   const [isVideoAnalyzing, setIsVideoAnalyzing] = useState(false);
   const [videoStatusMessage, setVideoStatusMessage] = useState<string>(''); // Progress Message
   const [isEditingAnalysis, setIsEditingAnalysis] = useState(false); // To allow manual correction
+
+  // New: Safety Feedback Editing State
+  const [editingFeedbackIndex, setEditingFeedbackIndex] = useState<number | null>(null);
+  const [tempFeedbackText, setTempFeedbackText] = useState("");
 
   // Current Doc Base64 (for AI analysis)
   const [currentLogBase64, setCurrentLogBase64] = useState<string | null>(null);
@@ -150,6 +154,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
      setVideoAnalysis(null);
      setIsEditingAnalysis(false);
      setVideoStatusMessage('');
+     setEditingFeedbackIndex(null);
      
      // Reset File inputs
      if (photoInputRef.current) photoInputRef.current.value = '';
@@ -193,25 +198,33 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     setRiskFactors(newRisks);
   };
 
-  // --- Manual Analysis Edit Helpers ---
-  const handleAnalysisUpdate = (field: keyof TBMAnalysisResult | string, value: any) => {
-      if (!videoAnalysis) return;
-      
-      if (field === 'score') {
-          // Clamp score between 0 and 100
-          const numVal = Math.min(100, Math.max(0, Number(value)));
-          setVideoAnalysis({ ...videoAnalysis, score: numVal });
-      } else if (field === 'evaluation') {
-          setVideoAnalysis({ ...videoAnalysis, evaluation: value });
-      } else if (field.startsWith('details.')) {
-          const detailKey = field.split('.')[1] as keyof typeof videoAnalysis.details;
-          setVideoAnalysis({
-              ...videoAnalysis,
-              details: { ...videoAnalysis.details, [detailKey]: value }
-          });
+  // --- Safety Feedback Editing Helpers ---
+  const startEditingFeedback = (index: number, text: string) => {
+      setEditingFeedbackIndex(index);
+      setTempFeedbackText(text);
+  };
+
+  const saveEditingFeedback = () => {
+      if (editingFeedbackIndex !== null) {
+          const newFeedback = [...safetyFeedback];
+          newFeedback[editingFeedbackIndex] = tempFeedbackText;
+          setSafetyFeedback(newFeedback);
+          setEditingFeedbackIndex(null);
       }
   };
 
+  const cancelEditingFeedback = () => {
+      setEditingFeedbackIndex(null);
+  };
+
+
+  // --- Manual Analysis Edit Helpers (Fixed for Reliability) ---
+  const updateAnalysis = (updater: (prev: TBMAnalysisResult) => TBMAnalysisResult) => {
+    setVideoAnalysis(prev => {
+        if (!prev) return null;
+        return updater(prev);
+    });
+  };
 
   // --- Reactive Workspace Loader ---
   useEffect(() => {
@@ -343,7 +356,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     }
   };
 
-  // --- Updated Video Audit Logic for Compression ---
+  // --- Updated Video Audit Logic for Robustness ---
   const handleVideoAudit = async () => {
     if (!tbmVideoFile) {
       alert("분석할 동영상 파일이 없습니다.");
@@ -351,56 +364,34 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     }
 
     setIsVideoAnalyzing(true);
-    setVideoStatusMessage('영상 준비 중...');
+    // 상태 메시지 초기화
+    setVideoStatusMessage("⏳ AI 분석을 위해 핵심 구간(10초) 추출 및 압축 중...");
     
-    let blobToProcess: Blob = tbmVideoFile;
-    let mimeTypeToProcess = tbmVideoFile.type;
-    const SIZE_THRESHOLD = 20 * 1024 * 1024; // 20MB
-
     try {
-      // 1. Check size and Compress if needed
-      if (tbmVideoFile.size > SIZE_THRESHOLD) {
-         setVideoStatusMessage('⏳ 대용량 영상 감지! 최적화(압축) 중...\n(화면이 멈춘 것이 아닙니다. 잠시만 기다려주세요.)');
-         try {
-            // Compress using helper
-            const compressedBlob = await compressVideo(tbmVideoFile);
-            
-            blobToProcess = compressedBlob;
-            mimeTypeToProcess = 'video/webm'; // Compressor returns WebM usually
-            
-            console.log(`Compression complete. New size: ${(blobToProcess.size / 1024 / 1024).toFixed(2)}MB`);
-            setVideoStatusMessage('✅ 최적화 완료! AI 분석 서버로 전송합니다...');
-            
-            // Safety check: if still > 20MB after compression (very rare for short TBM), slice it
-            if (blobToProcess.size > SIZE_THRESHOLD) {
-               console.warn("Compressed file still too large. Slicing.");
-               blobToProcess = blobToProcess.slice(0, SIZE_THRESHOLD);
-            }
+      // 1. 압축 시도 (compressVideo 내부에서 10초 컷, 10fps, 저해상도 변환 수행)
+      const compressedBlob = await compressVideo(tbmVideoFile);
 
-         } catch (compError) {
-            console.error("Compression failed:", compError);
-            alert("동영상 최적화에 실패했습니다. 앞부분만 잘라서 분석합니다.");
-            blobToProcess = tbmVideoFile.slice(0, SIZE_THRESHOLD);
-            setVideoStatusMessage('압축 실패 -> 부분 전송 중...');
-         }
-      } else {
-         setVideoStatusMessage('AI 서버로 영상을 전송하고 있습니다...');
-      }
+      setVideoStatusMessage(`✅ 최적화 완료! (${(compressedBlob.size / 1024).toFixed(1)} KB)\nAI 서버로 전송 중...`);
 
-      // 2. Convert to Base64
+      // 2. Base64 변환
       const reader = new FileReader();
-      reader.readAsDataURL(blobToProcess);
+      reader.readAsDataURL(compressedBlob);
       
       reader.onload = async (e) => {
         const base64String = e.target?.result as string;
         if (base64String) {
            const base64Data = base64String.split(',')[1];
+           const mimeTypeToProcess = compressedBlob.type || 'video/webm'; 
            
            // 3. Call AI API
-           const analysis = await evaluateTBMVideo(base64Data, mimeTypeToProcess);
-           
-           setVideoAnalysis(analysis);
-           setIsEditingAnalysis(false); 
+           try {
+               const analysis = await evaluateTBMVideo(base64Data, mimeTypeToProcess, workDescription);
+               setVideoAnalysis(analysis);
+               setIsEditingAnalysis(false); 
+           } catch (apiError) {
+               console.error(apiError);
+               alert("AI 서버 분석 실패. 잠시 후 다시 시도해주세요.");
+           }
         }
         setIsVideoAnalyzing(false);
         setVideoStatusMessage('');
@@ -412,9 +403,9 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
          setVideoStatusMessage('');
       }
 
-    } catch (error) {
+    } catch (error: any) {
        console.error(error);
-       alert("AI 분석 요청 실패: 네트워크 상태를 확인해주세요.");
+       alert(`영상 처리 실패: ${error.message || "알 수 없는 오류"}`);
        setIsVideoAnalyzing(false);
        setVideoStatusMessage('');
     }
@@ -431,8 +422,17 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     const currentTeamName = teams.find(t => t.id === teamId)?.name || '알 수 없음';
     const isEditMode = !!initialData;
     
-    const currentFormState = getCurrentFormState();
+    // Clean up analysis data before saving (remove empty strings from missingTopics)
+    const cleanedAnalysis = videoAnalysis ? {
+        ...videoAnalysis,
+        insight: {
+            ...videoAnalysis.insight,
+            missingTopics: videoAnalysis.insight.missingTopics.filter(t => t.trim().length > 0)
+        }
+    } : null;
 
+    // We can't use getCurrentFormState directly here because we modified videoAnalysis
+    // So we reconstruct it partially
     const newEntry: TBMEntry = {
       id: isEditMode ? String(initialData.id) : `ENTRY-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       date: entryDate,
@@ -447,13 +447,16 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
       tbmPhotoUrl: tbmPhotoPreview,
       tbmVideoUrl: tbmVideoPreview || undefined,
       tbmVideoFileName: tbmVideoFileName || undefined,
-      videoAnalysis: videoAnalysis || undefined, // Save analysis
+      videoAnalysis: cleanedAnalysis || undefined, // Save cleaned analysis
       originalLogImageUrl: currentLogBase64 || undefined,
       originalLogMimeType: isEditMode 
         ? initialData.originalLogMimeType 
         : (queue.find(q => q.id === activeQueueId)?.isPdf ? 'application/pdf' : 'image/jpeg'),
       createdAt: isEditMode ? initialData.createdAt : Date.now(),
     };
+    
+    // Also update current state to reflect cleaned data (for UI consistency if we stay on page)
+    if (videoAnalysis) setVideoAnalysis(cleanedAnalysis);
 
     // 1. Save Data First
     try {
@@ -474,6 +477,13 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
 
         const currentIndex = queue.findIndex(q => q.id === activeQueueId);
         let nextIdToActivate: string | null = null;
+        
+        const currentFormState = {
+            entryDate, entryTime, teamId, leaderName, attendeesCount,
+            workDescription, riskFactors, safetyFeedback,
+            tbmPhotoPreview, tbmVideoPreview, tbmVideoFileName, currentLogBase64,
+            videoAnalysis: cleanedAnalysis 
+        };
 
         if (action === 'finish_doc') {
            const forwardCandidate = queue.slice(currentIndex + 1).find(q => q.status !== 'done');
@@ -851,7 +861,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                           </div>
                        </div>
 
-                       {/* Feedback */}
+                       {/* Feedback (Now Editable) */}
                        <div className="bg-blue-50/50 rounded-xl border border-blue-100 p-3">
                           <div className="flex justify-between items-center mb-2">
                              <h4 className="text-[11px] font-bold text-blue-700 flex items-center gap-1">
@@ -863,14 +873,51 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                           </div>
                           <div className="space-y-1.5">
                              {(safetyFeedback || []).map((fb, i) => (
-                                <div key={i} className="flex gap-2 items-center bg-white p-2 rounded border border-blue-100 text-xs text-slate-700">
-                                   <CheckCircle2 size={12} className="text-blue-500 shrink-0"/>
-                                   <span className="flex-1 leading-tight">{fb}</span>
-                                   <button onClick={()=>{
-                                      const newF = [...safetyFeedback];
-                                      newF.splice(i, 1);
-                                      setSafetyFeedback(newF);
-                                   }} className="text-slate-300 hover:text-red-500"><X size={12}/></button>
+                                <div key={i} className="flex gap-2 items-start bg-white p-2 rounded border border-blue-100 text-xs text-slate-700 group">
+                                   <CheckCircle2 size={12} className="text-blue-500 shrink-0 mt-0.5"/>
+                                   
+                                   <div className="flex-1 min-w-0">
+                                       {editingFeedbackIndex === i ? (
+                                           <div className="flex gap-1 items-start">
+                                               <textarea 
+                                                   value={tempFeedbackText}
+                                                   onChange={(e) => setTempFeedbackText(e.target.value)}
+                                                   className="flex-1 border border-blue-300 rounded p-1 outline-none text-xs bg-white"
+                                                   rows={2}
+                                                   autoFocus
+                                               />
+                                               <div className="flex flex-col gap-1">
+                                                   <button onClick={saveEditingFeedback} className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700"><Check size={12}/></button>
+                                                   <button onClick={cancelEditingFeedback} className="bg-slate-200 text-slate-500 p-1 rounded hover:bg-slate-300"><X size={12}/></button>
+                                               </div>
+                                           </div>
+                                       ) : (
+                                           <span className="leading-tight block break-words">{fb}</span>
+                                       )}
+                                   </div>
+
+                                   {editingFeedbackIndex !== i && (
+                                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                           <button 
+                                               onClick={() => startEditingFeedback(i, fb)}
+                                               className="text-slate-300 hover:text-blue-600 p-0.5"
+                                               title="수정"
+                                           >
+                                               <Edit2 size={12}/>
+                                           </button>
+                                           <button 
+                                               onClick={()=>{
+                                                  const newF = [...safetyFeedback];
+                                                  newF.splice(i, 1);
+                                                  setSafetyFeedback(newF);
+                                               }} 
+                                               className="text-slate-300 hover:text-red-500 p-0.5"
+                                               title="삭제"
+                                           >
+                                               <X size={12}/>
+                                           </button>
+                                       </div>
+                                   )}
                                 </div>
                              ))}
                           </div>
@@ -916,152 +963,253 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                              </div>
                           </div>
 
-                          {/* Video Audit Result (Editable) */}
+                          {/* Video Audit Button */}
                           {tbmVideoPreview && !videoAnalysis && (
                              <div className="space-y-2">
                                 <button 
                                    onClick={handleVideoAudit}
                                    disabled={isVideoAnalyzing}
-                                   className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                                   className="w-full py-3 bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 text-white rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                                   style={{backgroundSize: '200% 100%'}}
                                 >
-                                   {isVideoAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <PlayCircle size={16}/>}
-                                   AI 품질 진단 (영상 분석)
+                                   {isVideoAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <Target size={16}/>}
+                                   AI 심층 정밀 진단 (Deep Insight)
                                 </button>
                                 {isVideoAnalyzing && videoStatusMessage && (
-                                   <div className="bg-slate-800 text-white text-[10px] p-2 rounded-lg text-center animate-pulse">
-                                      {videoStatusMessage.split('\n').map((line, i) => (
-                                         <p key={i}>{line}</p>
-                                      ))}
+                                   <div className="bg-slate-800 text-white text-[10px] p-2 rounded-lg text-center whitespace-pre-wrap">
+                                      {videoStatusMessage}
                                    </div>
                                 )}
                              </div>
                           )}
                           
+                          {/* AI Deep Insight Result Card */}
                           {videoAnalysis && (
-                             <div className="bg-white rounded-xl border border-violet-100 shadow-md overflow-hidden animate-slide-up relative">
-                                <div className="bg-violet-50 p-3 flex justify-between items-center border-b border-violet-100">
-                                   <h4 className="text-xs font-black text-violet-800 flex items-center gap-1">
-                                      <Sparkles size={12}/> AI TBM 품질 리포트
-                                   </h4>
+                             <div className="bg-white rounded-xl border border-indigo-100 shadow-xl overflow-hidden relative ring-1 ring-indigo-50">
+                                
+                                {/* Header */}
+                                <div className="bg-gradient-to-r from-indigo-50 to-violet-50 p-4 border-b border-indigo-100 flex justify-between items-center">
+                                   <div>
+                                      <h4 className="text-sm font-black text-indigo-900 flex items-center gap-2">
+                                         <Sparkles size={16} className="text-indigo-600"/> AI Deep Insight Report
+                                      </h4>
+                                      <p className="text-[10px] text-indigo-400 font-bold mt-0.5">Vision AI & Bias Analysis Engine</p>
+                                   </div>
                                    <div className="flex items-center gap-2">
-                                       {!isEditingAnalysis ? (
-                                           <div className="flex items-center gap-1">
-                                               <span className="text-[10px] font-bold text-slate-500">종합 점수:</span>
-                                               <span className={`text-sm font-black ${videoAnalysis.score >= 80 ? 'text-green-600' : videoAnalysis.score >= 50 ? 'text-orange-500' : 'text-red-500'}`}>
-                                                  {videoAnalysis.score}점
-                                               </span>
-                                           </div>
-                                       ) : (
-                                           <input 
-                                              type="number" 
-                                              value={videoAnalysis.score}
-                                              onChange={(e) => handleAnalysisUpdate('score', e.target.value)}
-                                              className="w-16 px-1 py-0.5 text-sm font-black text-right border border-violet-300 rounded focus:ring-2 focus:ring-violet-500 outline-none"
-                                              min="0" max="100"
-                                           />
+                                       <div className="text-right">
+                                          <span className="text-[10px] font-bold text-slate-400 block">종합 점수</span>
+                                          {isEditingAnalysis ? (
+                                             <input 
+                                                type="number" 
+                                                value={videoAnalysis.score} 
+                                                onChange={(e) => updateAnalysis(prev => ({...prev, score: Math.min(100, Math.max(0, Number(e.target.value)))}))}
+                                                className="w-16 text-right font-black text-xl border-b border-indigo-300 bg-transparent outline-none focus:border-indigo-500"
+                                             />
+                                          ) : (
+                                             <span className={`text-xl font-black ${videoAnalysis.score >= 80 ? 'text-green-600' : videoAnalysis.score >= 50 ? 'text-orange-500' : 'text-red-500'}`}>
+                                                {videoAnalysis.score}
+                                             </span>
+                                          )}
+                                       </div>
+                                       {!isEditingAnalysis && (
+                                          <button onClick={() => setIsEditingAnalysis(true)} className="p-1.5 hover:bg-white/50 rounded text-indigo-400"><Edit2 size={14}/></button>
                                        )}
-                                       <button 
-                                          onClick={() => setIsEditingAnalysis(!isEditingAnalysis)}
-                                          className={`p-1.5 rounded-full transition-colors ${isEditingAnalysis ? 'bg-violet-200 text-violet-700' : 'hover:bg-violet-100 text-slate-400'}`}
-                                          title={isEditingAnalysis ? "편집 완료" : "결과 수정"}
-                                       >
-                                          {isEditingAnalysis ? <Check size={12}/> : <Edit2 size={12}/>}
-                                       </button>
+                                       {isEditingAnalysis && (
+                                          <button onClick={() => setIsEditingAnalysis(false)} className="p-1.5 bg-indigo-100 rounded text-indigo-600"><Check size={14}/></button>
+                                       )}
                                    </div>
                                 </div>
-                                <div className="p-3 space-y-3">
-                                   {/* Evaluation Text */}
-                                   {!isEditingAnalysis ? (
-                                       <p className="text-xs font-bold text-slate-700 leading-snug">
-                                          "{videoAnalysis.evaluation}"
-                                       </p>
-                                   ) : (
-                                       <textarea 
-                                          value={videoAnalysis.evaluation}
-                                          onChange={(e) => handleAnalysisUpdate('evaluation', e.target.value)}
-                                          className="w-full text-xs font-bold text-slate-700 p-2 border border-violet-200 rounded focus:border-violet-500 outline-none resize-none"
-                                          rows={2}
-                                       />
+
+                                <div className="p-4 space-y-4">
+                                   
+                                   {/* 1. Evaluation Summary */}
+                                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                      {isEditingAnalysis ? (
+                                         <textarea 
+                                            value={videoAnalysis.evaluation}
+                                            onChange={(e) => updateAnalysis(prev => ({...prev, evaluation: e.target.value}))}
+                                            className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded p-2 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                            rows={3}
+                                         />
+                                      ) : (
+                                         <p className="text-xs font-bold text-slate-700 leading-snug">
+                                            "{videoAnalysis.evaluation}"
+                                         </p>
+                                      )}
+                                   </div>
+
+                                   {/* 2. Worker Focus Heatmap (Feature 3) */}
+                                   <div>
+                                      <h5 className="text-[10px] font-black text-slate-400 uppercase mb-2 flex items-center gap-1">
+                                         <Eye size={12}/> Worker Focus Heatmap
+                                      </h5>
+                                      <div className="grid grid-cols-3 gap-2">
+                                         {['front', 'back', 'side'].map((zone) => {
+                                            const key = zone as keyof typeof videoAnalysis.focusAnalysis.focusZones;
+                                            const level = videoAnalysis.focusAnalysis?.focusZones?.[key] || 'HIGH';
+                                            const zoneName = zone === 'front' ? '전면(Front)' : zone === 'back' ? '후면(Back)' : '측면(Side)';
+                                            
+                                            return (
+                                               <div key={zone} className={`p-2 rounded-lg border flex flex-col items-center gap-1 ${level === 'HIGH' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                                                  <span className="text-[9px] font-bold text-slate-500 uppercase">{zoneName} Zone</span>
+                                                  {isEditingAnalysis ? (
+                                                      <select 
+                                                         value={level} 
+                                                         onChange={(e) => updateAnalysis(prev => ({
+                                                             ...prev,
+                                                             focusAnalysis: {
+                                                                 ...prev.focusAnalysis,
+                                                                 focusZones: {
+                                                                     ...prev.focusAnalysis.focusZones,
+                                                                     [key]: e.target.value as 'HIGH' | 'LOW'
+                                                                 }
+                                                             }
+                                                         }))}
+                                                         className="text-[10px] font-bold bg-white border border-slate-300 rounded px-1 py-0.5"
+                                                      >
+                                                          <option value="HIGH">집중</option>
+                                                          <option value="LOW">산만</option>
+                                                      </select>
+                                                  ) : (
+                                                      <span className={`text-xs font-black ${level === 'HIGH' ? 'text-green-600' : 'text-red-500'}`}>
+                                                         {level === 'HIGH' ? '집중' : '산만'}
+                                                      </span>
+                                                  )}
+                                               </div>
+                                            );
+                                         })}
+                                      </div>
+                                      <div className="mt-2 flex justify-between items-center text-[10px] text-slate-500 px-1">
+                                         <div className="flex items-center gap-1">
+                                            <span>전체 집중도:</span>
+                                            {isEditingAnalysis ? (
+                                                <input 
+                                                    type="number" 
+                                                    value={videoAnalysis.focusAnalysis?.overall || 0}
+                                                    onChange={(e) => updateAnalysis(prev => ({...prev, focusAnalysis: {...prev.focusAnalysis, overall: Number(e.target.value)}}))}
+                                                    className="w-10 text-right border-b border-slate-300 font-bold outline-none"
+                                                />
+                                            ) : (
+                                                <strong className="text-slate-800">{videoAnalysis.focusAnalysis?.overall || 0}</strong>
+                                            )}
+                                            <span>%</span>
+                                         </div>
+                                         <div className="flex items-center gap-1">
+                                            <span>딴짓 감지:</span>
+                                            {isEditingAnalysis ? (
+                                                <input 
+                                                    type="number" 
+                                                    value={videoAnalysis.focusAnalysis?.distractedCount || 0}
+                                                    onChange={(e) => updateAnalysis(prev => ({...prev, focusAnalysis: {...prev.focusAnalysis, distractedCount: Number(e.target.value)}}))}
+                                                    className="w-8 text-right border-b border-slate-300 font-bold outline-none text-red-500"
+                                                />
+                                            ) : (
+                                                <strong className="text-red-500">{videoAnalysis.focusAnalysis?.distractedCount || 0}</strong>
+                                            )}
+                                            <span>명</span>
+                                         </div>
+                                      </div>
+                                   </div>
+
+                                   {/* 3. Bias Analysis - Blind Spots (Feature 2) */}
+                                   {(videoAnalysis.insight?.missingTopics?.length > 0 || isEditingAnalysis) && (
+                                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 relative overflow-hidden">
+                                          <div className="absolute top-0 right-0 w-16 h-16 bg-orange-100 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl"></div>
+                                          <h5 className="text-[10px] font-black text-orange-700 uppercase mb-2 flex items-center gap-1 relative z-10">
+                                             <AlertOctagon size={12}/> Blind Spot Alert (누락 위험)
+                                          </h5>
+                                          
+                                          {isEditingAnalysis ? (
+                                              <div className="relative z-10 space-y-2">
+                                                  <input 
+                                                      type="text"
+                                                      value={videoAnalysis.insight.missingTopics.join(',')} // Join with comma only to allow space typing if user wants
+                                                      onChange={(e) => updateAnalysis(prev => ({
+                                                          ...prev, 
+                                                          insight: {
+                                                              ...prev.insight, 
+                                                              // Allow empty strings while typing to preserve trailing comma
+                                                              missingTopics: e.target.value.split(',')
+                                                          }
+                                                      }))}
+                                                      className="w-full text-[10px] border border-orange-300 rounded px-2 py-1 bg-white mb-1 placeholder:text-orange-300"
+                                                      placeholder="누락된 주제 입력 (콤마로 구분)"
+                                                  />
+                                                  <textarea 
+                                                      value={videoAnalysis.insight.suggestion}
+                                                      onChange={(e) => updateAnalysis(prev => ({
+                                                          ...prev, 
+                                                          insight: {
+                                                              ...prev.insight, 
+                                                              suggestion: e.target.value
+                                                          }
+                                                      }))}
+                                                      className="w-full text-[10px] border border-orange-300 rounded px-2 py-1 bg-white font-medium"
+                                                      rows={2}
+                                                      placeholder="개선 제안 입력"
+                                                  />
+                                              </div>
+                                          ) : (
+                                              <>
+                                                  <div className="flex flex-wrap gap-1.5 relative z-10">
+                                                     {videoAnalysis.insight.missingTopics.filter(t => t.trim() !== "").map((topic, i) => (
+                                                        <span key={i} className="text-[10px] font-bold bg-white text-orange-600 px-2 py-1 rounded border border-orange-100 shadow-sm">
+                                                           {topic}
+                                                        </span>
+                                                     ))}
+                                                  </div>
+                                                  <p className="text-[10px] text-orange-800 mt-2 font-medium border-t border-orange-200/50 pt-2 leading-snug">
+                                                     💡 Tip: {videoAnalysis.insight.suggestion}
+                                                  </p>
+                                              </>
+                                          )}
+                                       </div>
                                    )}
 
-                                   {/* Detail Metrics */}
-                                   <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                      <div className="bg-slate-50 p-1.5 rounded border border-slate-100 flex justify-between items-center">
-                                         <span className="text-slate-500">참여도</span>
-                                         {!isEditingAnalysis ? (
-                                            <span className="font-bold">{videoAnalysis.details.participation}</span>
+                                   {/* 4. Basic Metrics (Standard TBM) */}
+                                   <div className="grid grid-cols-2 gap-2">
+                                      <div className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
+                                         <span className="text-[10px] font-bold text-slate-500">목소리 명확도</span>
+                                         {isEditingAnalysis ? (
+                                             <select 
+                                                 value={videoAnalysis.details.voiceClarity}
+                                                 onChange={(e) => updateAnalysis(prev => ({...prev, details: {...prev.details, voiceClarity: e.target.value as any}}))}
+                                                 className="text-[10px] font-black text-slate-700 bg-white border border-slate-300 rounded px-1"
+                                             >
+                                                 <option value="CLEAR">명확함</option>
+                                                 <option value="MUFFLED">다소 불분명</option>
+                                                 <option value="NONE">식별 불가</option>
+                                             </select>
                                          ) : (
-                                            <select 
-                                               value={videoAnalysis.details.participation}
-                                               onChange={(e) => handleAnalysisUpdate('details.participation', e.target.value)}
-                                               className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold outline-none"
-                                            >
-                                               <option value="GOOD">GOOD</option>
-                                               <option value="MODERATE">MODERATE</option>
-                                               <option value="BAD">BAD</option>
-                                            </select>
+                                             <span className="text-[10px] font-black text-slate-700">
+                                                {videoAnalysis.details.voiceClarity === 'CLEAR' ? '명확함' : 
+                                                 videoAnalysis.details.voiceClarity === 'MUFFLED' ? '다소 불분명' : '식별 불가'}
+                                             </span>
                                          )}
                                       </div>
-                                      <div className="bg-slate-50 p-1.5 rounded border border-slate-100 flex justify-between items-center">
-                                         <span className="text-slate-500">목소리</span>
-                                         {!isEditingAnalysis ? (
-                                            <span className="font-bold">{videoAnalysis.details.voiceClarity}</span>
+                                      <div className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
+                                         <span className="text-[10px] font-bold text-slate-500">보호구 상태</span>
+                                         {isEditingAnalysis ? (
+                                             <select 
+                                                 value={videoAnalysis.details.ppeStatus}
+                                                 onChange={(e) => updateAnalysis(prev => ({...prev, details: {...prev.details, ppeStatus: e.target.value as any}}))}
+                                                 className="text-[10px] font-black text-slate-700 bg-white border border-slate-300 rounded px-1"
+                                             >
+                                                 <option value="GOOD">준수 (양호)</option>
+                                                 <option value="BAD">미흡 (불량)</option>
+                                             </select>
                                          ) : (
-                                            <select 
-                                               value={videoAnalysis.details.voiceClarity}
-                                               onChange={(e) => handleAnalysisUpdate('details.voiceClarity', e.target.value)}
-                                               className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold outline-none"
-                                            >
-                                               <option value="CLEAR">CLEAR</option>
-                                               <option value="MUFFLED">MUFFLED</option>
-                                               <option value="NONE">NONE</option>
-                                            </select>
-                                         )}
-                                      </div>
-                                      <div className="bg-slate-50 p-1.5 rounded border border-slate-100 flex justify-between items-center">
-                                         <span className="text-slate-500">보호구</span>
-                                         {!isEditingAnalysis ? (
-                                            <span className="font-bold">{videoAnalysis.details.ppeStatus}</span>
-                                         ) : (
-                                            <select 
-                                               value={videoAnalysis.details.ppeStatus}
-                                               onChange={(e) => handleAnalysisUpdate('details.ppeStatus', e.target.value)}
-                                               className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold outline-none"
-                                            >
-                                               <option value="GOOD">GOOD</option>
-                                               <option value="BAD">BAD</option>
-                                            </select>
-                                         )}
-                                      </div>
-                                      <div className="bg-slate-50 p-1.5 rounded border border-slate-100 flex justify-between items-center">
-                                         <span className="text-slate-500">상호작용</span>
-                                         {!isEditingAnalysis ? (
-                                            <span className="font-bold">{videoAnalysis.details.interaction ? '있음' : '없음'}</span>
-                                         ) : (
-                                            <select 
-                                               value={videoAnalysis.details.interaction ? "true" : "false"}
-                                               onChange={(e) => handleAnalysisUpdate('details.interaction', e.target.value === "true")}
-                                               className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[10px] font-bold outline-none"
-                                            >
-                                               <option value="true">있음</option>
-                                               <option value="false">없음</option>
-                                            </select>
+                                             <span className="text-[10px] font-black text-slate-700">
+                                                {videoAnalysis.details.ppeStatus === 'GOOD' ? '준수 (양호)' : '미흡 (불량)'}
+                                             </span>
                                          )}
                                       </div>
                                    </div>
 
-                                   {/* Feedback List */}
-                                   <div className="space-y-1">
-                                      {videoAnalysis.feedback.map((fb, idx) => (
-                                         <div key={idx} className="flex gap-1.5 items-start text-[10px] text-slate-600">
-                                            <span className="text-violet-500 mt-0.5">●</span>
-                                            <span className="leading-tight">{fb}</span>
-                                         </div>
-                                      ))}
-                                   </div>
                                 </div>
+                                
                                 {isEditingAnalysis && (
-                                   <div className="absolute inset-0 bg-violet-500/5 pointer-events-none border-2 border-violet-500 rounded-xl z-0"></div>
+                                   <div className="absolute inset-0 bg-indigo-500/5 pointer-events-none border-2 border-indigo-500 rounded-xl z-20"></div>
                                 )}
                              </div>
                           )}
