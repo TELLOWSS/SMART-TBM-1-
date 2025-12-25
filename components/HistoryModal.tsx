@@ -1,13 +1,37 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2, Edit2, ListOrdered } from 'lucide-react';
+import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2, Edit2, ListOrdered, Save, FileVideo } from 'lucide-react';
 
 interface HistoryModalProps {
   onClose: () => void;
 }
 
 const milestones = [
+  {
+    version: 'v2.6.6',
+    date: '2025.12.08',
+    title: '보고서 증빙 표기 개선',
+    desc: '보고서 출력 시 동영상 포함 여부를 명확히 식별하도록 UI 개선. 영상 파일명과 상태 아이콘을 상세하게 표시하여 증빙 신뢰도 향상.',
+    icon: <FileVideo size={18} />,
+    color: 'bg-red-500'
+  },
+  {
+    version: 'v2.6.5',
+    date: '2025.12.08',
+    title: '오디오 엔진 및 AI 편향 수정',
+    desc: '음성 인식 실패 해결을 위한 Web Audio API 라우팅 적용. AI 분석 시 산만함 과대 평가 방지를 위한 긍정 우선(Positive Default) 로직 도입.',
+    icon: <Zap size={18} />,
+    color: 'bg-yellow-500'
+  },
+  {
+    version: 'v2.6.2',
+    date: '2025.12.08',
+    title: '위험성평가 데이터 백업/복구',
+    desc: '업데이트 및 초기화에 대비해 위험성평가 관리 데이터를 JSON 파일로 백업하고 즉시 복구할 수 있는 기능 추가.',
+    icon: <Save size={18} />,
+    color: 'bg-emerald-500'
+  },
   {
     version: 'v2.6.1',
     date: '2025.12.08',

@@ -129,26 +129,11 @@ function App() {
       }
     }
 
-    // 2. Load Teams (FIXED: Merge hardcoded defaults with localStorage)
+    // 2. Load Teams
     const savedTeams = localStorage.getItem('site_teams');
-    let initialTeams = TEAMS;
+    setTeams(savedTeams ? JSON.parse(savedTeams) : TEAMS);
 
-    if (savedTeams) {
-        try {
-            const parsed = JSON.parse(savedTeams);
-            // Ensure all default TEAMS are present in the loaded list (Fix for missing new teams)
-            const missing = TEAMS.filter(def => !parsed.some((p: any) => p.id === def.id));
-            if (missing.length > 0) {
-                initialTeams = [...parsed, ...missing];
-                localStorage.setItem('site_teams', JSON.stringify(initialTeams));
-            } else {
-                initialTeams = parsed;
-            }
-        } catch(e) { console.error("Team load error", e); }
-    }
-    setTeams(initialTeams);
-
-    // 3. Load Monthly Assessments
+    // 3. Load Monthly Assessments (Migrate legacy single object to array if needed)
     const savedMonthly = localStorage.getItem('monthly_assessment_list'); // NEW KEY
     const legacyMonthly = localStorage.getItem('monthly_assessment'); // OLD KEY
 

@@ -2,7 +2,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { MonthlyRiskAssessment, SafetyGuideline } from '../types';
 import { extractMonthlyPriorities, ExtractedPriority, MonthlyExtractionResult } from '../services/geminiService';
-import { Upload, Loader2, Trash2, ShieldCheck, Plus, RefreshCcw, Calendar, TrendingUp, Search, Edit2, Save, X } from 'lucide-react';
+import { Upload, Loader2, Trash2, ShieldCheck, Plus, RefreshCcw, Calendar, TrendingUp, Search, Edit2, Save, X, Download, FileJson } from 'lucide-react';
 
 interface RiskAssessmentManagerProps {
   assessments: MonthlyRiskAssessment[];
@@ -40,7 +40,10 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
   // Manual Input State
   const [manualInput, setManualInput] = useState('');
   const [manualCategory, setManualCategory] = useState('공통');
+  
+  // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   // --- NEW: Search & Edit State ---
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,10 +54,72 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
 
   // --- Helpers ---
   const normalizeString = (str: string) => {
-    return str.replace(/[\s\n\r.,\-()[\]]/g, '').trim();
+    return (str || '').replace(/[\s\n\r.,\-()[\]]/g, '').trim();
   };
 
   // --- Handlers ---
+
+  // 1. Data Backup (Export)
+  const handleExportBackup = () => {
+    if (assessments.length === 0) {
+      alert("백업할 데이터가 없습니다.");
+      return;
+    }
+    const dataStr = JSON.stringify(assessments, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RISK_ASSESSMENT_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // 2. Data Restore (Import)
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const loadedData = JSON.parse(event.target?.result as string);
+        if (Array.isArray(loadedData)) {
+          // Merge logic: Overwrite existing items with same ID, add new ones
+          // Explicitly typed Map to avoid inference issues
+          const currentMap = new Map<string, MonthlyRiskAssessment>();
+          assessments.forEach(item => currentMap.set(item.id, item));
+          
+          (loadedData as any[]).forEach((item: any) => {
+             // Basic validation
+             if(item.id && item.month && Array.isArray(item.priorities)) {
+                currentMap.set(item.id, item as MonthlyRiskAssessment);
+             }
+          });
+
+          const merged: MonthlyRiskAssessment[] = Array.from(currentMap.values());
+          onSave(merged);
+          alert(`✅ 데이터 복구 완료: 총 ${merged.length}개월분의 데이터가 로드되었습니다.`);
+          
+          // Select the most recent one
+          if (merged.length > 0) {
+             const latest = merged.sort((a, b) => b.month.localeCompare(a.month))[0];
+             setSelectedMonthId(latest.id);
+          }
+        } else {
+          alert("올바르지 않은 백업 파일 형식입니다.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("파일을 읽는 중 오류가 발생했습니다.");
+      } finally {
+        if(backupInputRef.current) backupInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const handleCreateMonth = () => {
      if (assessments.some(a => a.month === targetMonth)) {
@@ -283,8 +348,8 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
      if (!activeAssessment) return [];
      if (!searchTerm.trim()) return activeAssessment.priorities;
      return activeAssessment.priorities.filter(item => 
-        item.content.includes(searchTerm) || 
-        item.category.includes(searchTerm)
+        (item.content || '').includes(searchTerm) || 
+        (item.category || '').includes(searchTerm)
      );
   }, [activeAssessment, searchTerm]);
 
@@ -359,15 +424,36 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                          총 {activeAssessment.priorities.length}개의 중점 관리 항목이 등록되어 있습니다.
                       </p>
                    </div>
-                   <div className="flex items-center gap-3">
-                      <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">
-                         {isAnalyzing ? <Loader2 size={18} className="animate-spin"/> : <Upload size={18}/>}
-                         <span>문서 분석/추가</span>
-                      </button>
-                      <button onClick={handleDeleteMonth} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors" title="이 월의 데이터 삭제">
-                         <Trash2 size={20} />
-                      </button>
-                      <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="application/pdf,image/*"/>
+                   
+                   <div className="flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-2">
+                          <button 
+                             onClick={handleExportBackup}
+                             className="flex items-center gap-2 bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors border border-slate-200"
+                             title="전체 데이터 백업 (JSON)"
+                          >
+                             <Download size={14} /> 백업
+                          </button>
+                          <button 
+                             onClick={() => backupInputRef.current?.click()}
+                             className="flex items-center gap-2 bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors border border-slate-200"
+                             title="데이터 복구 (JSON)"
+                          >
+                             <Upload size={14} /> 복구
+                          </button>
+                          <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleImportBackup}/>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                          <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">
+                             {isAnalyzing ? <Loader2 size={18} className="animate-spin"/> : <FileJson size={18}/>}
+                             <span>문서 분석/추가</span>
+                          </button>
+                          <button onClick={handleDeleteMonth} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors" title="이 월의 데이터 삭제">
+                             <Trash2 size={20} />
+                          </button>
+                          <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="application/pdf,image/*"/>
+                      </div>
                    </div>
                 </div>
 
@@ -462,7 +548,7 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                                 // Map filtered list but use original Index to manage editing
                                 activeAssessment.priorities.map((item, originalIndex) => {
                                    // Manual Filter Check
-                                   if (searchTerm.trim() && !(item.content.includes(searchTerm) || item.category.includes(searchTerm))) {
+                                   if (searchTerm.trim() && !((item.content || '').includes(searchTerm) || (item.category || '').includes(searchTerm))) {
                                        return null; 
                                    }
 
@@ -559,6 +645,14 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                 <Calendar size={64} className="mb-4 opacity-20"/>
                 <h3 className="text-xl font-bold text-slate-600">월을 선택하거나 생성하세요</h3>
                 <p className="text-sm">왼쪽 사이드바에서 작업을 시작할 수 있습니다.</p>
+                
+                {/* Empty State Action */}
+                <div className="mt-4 flex gap-2">
+                   <button onClick={() => backupInputRef.current?.click()} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200">
+                      기존 데이터 복구하기
+                   </button>
+                   <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleImportBackup}/>
+                </div>
              </div>
           )}
        </div>

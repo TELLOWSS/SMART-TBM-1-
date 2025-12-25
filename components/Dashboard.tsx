@@ -157,27 +157,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
   const maxCount = Math.max(...weeklyStats.map(s => s.count), 1);
 
   // --- Premium Stat Card ---
-  const StatCard = ({ title, value, unit, icon, color, subtext, delay }: any) => (
-    <div className={`relative overflow-hidden bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 group animate-slide-up ${delay}`}>
-      <div className={`absolute top-0 right-0 p-3 opacity-[0.08] transform group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 ${color}`}>
-         {React.cloneElement(icon, { size: 80 })}
-      </div>
-      <div className="relative z-10">
-         <div className="flex items-center gap-2 mb-3">
-            <div className={`p-2 rounded-lg ${color} bg-opacity-10 text-opacity-100`}>
-               {React.cloneElement(icon, { size: 18 })}
-            </div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</span>
-         </div>
-         <div className="flex items-baseline gap-1">
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{value}</h3>
-            <span className="text-sm font-bold text-slate-400">{unit}</span>
-         </div>
-         {subtext && <p className="text-[11px] font-medium text-slate-400 mt-2 flex items-center gap-1">{subtext}</p>}
-      </div>
-      <div className={`absolute bottom-0 left-0 h-1 w-0 group-hover:w-full transition-all duration-700 ${color.replace('text', 'bg')}`}></div>
-    </div>
-  );
+  // Safeguard: Ensure color is a string before calling replace
+  const StatCard = ({ title, value, unit, icon, color, subtext, delay }: any) => {
+    const safeColor = color || '';
+    return (
+        <div className={`relative overflow-hidden bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 group animate-slide-up ${delay}`}>
+          <div className={`absolute top-0 right-0 p-3 opacity-[0.08] transform group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 ${safeColor}`}>
+             {React.cloneElement(icon, { size: 80 })}
+          </div>
+          <div className="relative z-10">
+             <div className="flex items-center gap-2 mb-3">
+                <div className={`p-2 rounded-lg ${safeColor} bg-opacity-10 text-opacity-100`}>
+                   {React.cloneElement(icon, { size: 18 })}
+                </div>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</span>
+             </div>
+             <div className="flex items-baseline gap-1">
+                <h3 className="text-3xl font-black text-slate-800 tracking-tight">{value}</h3>
+                <span className="text-sm font-bold text-slate-400">{unit}</span>
+             </div>
+             {subtext && <p className="text-[11px] font-medium text-slate-400 mt-2 flex items-center gap-1">{subtext}</p>}
+          </div>
+          <div className={`absolute bottom-0 left-0 h-1 w-0 group-hover:w-full transition-all duration-700 ${safeColor.replace('text', 'bg')}`}></div>
+        </div>
+    );
+  };
 
   return (
     <div className="space-y-5 pb-10">
@@ -464,7 +468,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
             </div>
          </div>
 
-         {/* Right: Recent Activity List (LIMIT INCREASED TO 30) */}
+         {/* Right: Recent Activity List */}
          <div className="bg-white rounded-[1.5rem] flex flex-col border border-slate-200 shadow-sm overflow-hidden h-[500px] lg:h-auto animate-slide-up delay-300">
             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
                <div>
@@ -487,7 +491,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
                      <span className="text-sm font-bold">등록된 활동이 없습니다.</span>
                   </div>
                ) : (
-                  entries.slice(0, 30).map((entry, idx) => (
+                  entries.slice(0, 10).map((entry, idx) => (
                      <div key={entry.id || idx} className="group relative bg-white p-4 rounded-xl border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all duration-300">
                         {/* Timeline Connector */}
                         {idx !== entries.length - 1 && (

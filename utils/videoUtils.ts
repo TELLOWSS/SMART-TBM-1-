@@ -1,12 +1,12 @@
 
 /**
- * 동영상 압축 유틸리티 (Safe Mode - Video Only)
+ * 동영상 압축 및 오디오 캡처 유틸리티 (Audio + Video)
  * 
- * [오류 해결을 위한 조치]
- * 1. Audio Track 제거: 브라우저에서의 오디오/비디오 믹싱 과정에서 발생하는 컨테이너 손상 방지
- * 2. Bitrate: 150kbps (초경량)
- * 3. Resolution: 360p
- * 4. Duration: 10초
+ * [v2.6.5 개선사항 - Audio Fix]
+ * 1. 기존 'muted=true' 방식은 오디오 데이터까지 0으로 만들어 AI가 음성을 인식하지 못함.
+ * 2. 해결책: 'muted=false'로 설정하되, Web Audio API를 사용해 스피커(Destination) 연결을 끊고
+ *    MediaRecorder(StreamDestination)로만 오디오를 라우팅함.
+ *    => 사용자: 조용함 (Silent), 녹음기: 소리 들림 (Active Audio).
  */
 
 export const compressVideo = (file: File): Promise<Blob> => {
@@ -14,33 +14,54 @@ export const compressVideo = (file: File): Promise<Blob> => {
     const video = document.createElement('video');
     const url = URL.createObjectURL(file);
     
+    // 1. 기본 설정
     video.src = url;
-    video.muted = true; // 무음 처리 (오디오 트랙 사용 안함)
-    video.playsInline = true;
     video.crossOrigin = "anonymous";
-    video.preload = "metadata";
+    video.playsInline = true;
+    video.setAttribute('webkit-playsinline', 'true');
+    video.preload = "auto";
+    
+    // [CRITICAL CHANGE]
+    // AI 음성 인식을 위해 muted는 절대 false여야 함.
+    // 대신 소리가 밖으로 새나가지 않게 AudioContext로 라우팅을 제어함.
+    video.muted = false; 
+    video.volume = 1.0; 
+    
+    let stream: MediaStream | null = null;
+    let mediaRecorder: MediaRecorder | null = null;
+    let animationId: number;
+    let audioCtx: AudioContext | null = null;
+    let source: MediaElementAudioSourceNode | null = null;
+    let dest: MediaStreamAudioDestinationNode | null = null;
 
     const cleanup = () => {
-      URL.revokeObjectURL(url);
-      video.removeAttribute('src');
+      if (animationId) cancelAnimationFrame(animationId);
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      
+      // Clean up Audio Context
+      if (source) try { source.disconnect(); } catch(e) {}
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      
       video.pause();
-      video.load();
+      video.removeAttribute('src');
       video.remove();
+      URL.revokeObjectURL(url);
     };
 
-    // 타임아웃 15초
     const timeoutId = setTimeout(() => {
         cleanup();
-        reject(new Error("Video timeout"));
-    }, 15000);
+        reject(new Error("Video processing timeout (30s limit)"));
+    }, 30000);
 
-    video.onloadedmetadata = () => {
-      clearTimeout(timeoutId);
+    video.oncanplay = () => {
+      if (stream) return;
 
-      // 1. 해상도 360p 강제 (짝수 맞춤)
+      // 1. Resolution Resize (360p)
       const TARGET_HEIGHT = 360;
       let width = video.videoWidth;
       let height = video.videoHeight;
+      
+      if (width === 0 || height === 0) { width = 640; height = 360; }
       
       if (height > TARGET_HEIGHT) {
         width = Math.round(width * (TARGET_HEIGHT / height));
@@ -49,7 +70,6 @@ export const compressVideo = (file: File): Promise<Blob> => {
       if (width % 2 !== 0) width--;
       if (height % 2 !== 0) height--;
 
-      // 2. 캔버스 준비
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
@@ -57,35 +77,52 @@ export const compressVideo = (file: File): Promise<Blob> => {
 
       if (!ctx) {
         cleanup();
-        reject(new Error("Canvas init failed"));
+        reject(new Error("Canvas context initialization failed"));
         return;
       }
 
-      // 3. 스트림 생성 (Video Only - 10 FPS)
-      const stream = canvas.captureStream(10);
-
-      // 4. Recorder 설정 (150kbps)
-      const options: MediaRecorderOptions = {
-        videoBitsPerSecond: 150000, 
-        mimeType: 'video/webm;codecs=vp8'
-      };
-
-      if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
-           if (MediaRecorder.isTypeSupported('video/webm')) {
-               options.mimeType = 'video/webm';
-           } else if (MediaRecorder.isTypeSupported('video/mp4')) {
-               options.mimeType = 'video/mp4';
-           } else {
-               options.mimeType = '';
-           }
+      // 2. [Advanced Audio Routing] - The "Silent Recording" Trick
+      let audioTracks: MediaStreamTrack[] = [];
+      try {
+         // Create Audio Context
+         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+         audioCtx = new AudioContextClass();
+         
+         // Create Source from Video Element
+         source = audioCtx.createMediaElementSource(video);
+         
+         // Create Destination (Stream) - This effectively captures the audio
+         dest = audioCtx.createMediaStreamDestination();
+         
+         // Connect Source -> Stream Destination
+         source.connect(dest);
+         
+         // IMPORTANT: We do NOT connect 'source' to 'audioCtx.destination' (Speakers).
+         // This isolates the audio path to the recorder only. No sound will come out of speakers.
+         
+         audioTracks = dest.stream.getAudioTracks();
+      } catch (e) {
+         console.warn("Web Audio API setup failed, falling back to silent video:", e);
       }
 
-      let mediaRecorder: MediaRecorder;
+      // 3. Combine Streams
+      const canvasStream = canvas.captureStream(30); 
+      const tracks = [...canvasStream.getVideoTracks(), ...audioTracks];
+      stream = new MediaStream(tracks);
+
+      // 4. Recorder Setup
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' 
+                     : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
+                     : 'video/mp4';
+
       try {
-        mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorder = new MediaRecorder(stream, {
+          mimeType,
+          videoBitsPerSecond: 600000, // 600kbps for better audio/video balance
+        });
       } catch (e) {
         cleanup();
-        reject(new Error("MediaRecorder failed"));
+        reject(new Error(`MediaRecorder init failed`));
         return;
       }
 
@@ -95,10 +132,10 @@ export const compressVideo = (file: File): Promise<Blob> => {
       };
 
       mediaRecorder.onstop = () => {
+        clearTimeout(timeoutId);
         try {
-            // 최종 Blob 생성
-            const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'video/webm' });
-            console.log(`🎥 Video Processed (Video Only): ${(blob.size / 1024).toFixed(1)} KB`);
+            const blob = new Blob(chunks, { type: mimeType });
+            console.log(`✅ Video Processed: ${(blob.size / 1024).toFixed(1)} KB`);
             resolve(blob);
         } catch (e) {
             reject(e);
@@ -107,49 +144,42 @@ export const compressVideo = (file: File): Promise<Blob> => {
         }
       };
 
-      // 5. 녹화 루프 (10초)
+      // 5. Start Recording Loop
       const DURATION_MS = 10000;
-      let startTime = 0;
-      let animationId: number;
+      let startTime = Date.now();
 
       const draw = () => {
-        if (video.paused || video.ended) return;
+        if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
         
         if (Date.now() - startTime > DURATION_MS) {
-            if (mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-                video.pause();
-            }
+            if (mediaRecorder.state === 'recording') mediaRecorder.stop();
             return;
         }
 
-        ctx.drawImage(video, 0, 0, width, height);
+        try { ctx.drawImage(video, 0, 0, width, height); } catch (err) {}
         animationId = requestAnimationFrame(draw);
       };
 
-      video.onplay = () => {
-        startTime = Date.now();
-        mediaRecorder.start(); 
-        draw();
-      };
-
-      video.onended = () => {
-        if (mediaRecorder.state === 'recording') mediaRecorder.stop();
-        cancelAnimationFrame(animationId);
-      };
-
-      // 6. 재생 (Muted)
-      video.muted = true;
-      video.currentTime = 0;
-      video.play().catch(e => {
+      // 6. Play & Record
+      // We must catch play() errors because unmuted autoplay is often blocked by browsers
+      // if there was no user interaction. However, in this app, compressVideo() is triggered by
+      // a file input change (user interaction), so it usually works.
+      video.play().then(() => {
+          if (mediaRecorder && mediaRecorder.state === 'inactive') {
+              mediaRecorder.start();
+              startTime = Date.now();
+              draw();
+          }
+      }).catch(e => {
+          console.error("Playback failed (Autoplay Policy?):", e);
           cleanup();
-          reject(new Error("Playback failed"));
+          reject(new Error("Browser blocked video playback. Please try again."));
       });
     };
 
     video.onerror = () => {
         cleanup();
-        reject(new Error("File load error"));
+        reject(new Error("Video format error."));
     };
   });
 };

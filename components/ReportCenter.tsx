@@ -65,11 +65,13 @@ export const ReportCenter: React.FC<ReportCenterProps> = ({ entries, onOpenPrint
       const rows = filteredEntries.map((entry, idx) => {
          // Handle Photo adding to ZIP
          let photoFileName = '';
+         // Safeguard teamName
+         const safeTeamName = (entry.teamName || 'unknown').replace(/[\/\\?%*:|"<>]/g, '_');
+
          if (entry.tbmPhotoUrl && photoFolder) {
              const base64Data = entry.tbmPhotoUrl.split(',')[1];
              const ext = entry.tbmPhotoUrl.includes('image/png') ? 'png' : 'jpg';
              // Clean filename
-             const safeTeamName = entry.teamName.replace(/[\/\\?%*:|"<>]/g, '_');
              const fileName = `${entry.date}_${safeTeamName}_${idx + 1}.${ext}`;
              
              photoFolder.file(fileName, base64Data, { base64: true });
@@ -77,12 +79,12 @@ export const ReportCenter: React.FC<ReportCenterProps> = ({ entries, onOpenPrint
          }
 
          // Format Risk Factors
-         const risks = entry.riskFactors
+         const risks = (entry.riskFactors || [])
             .map(r => `[위험] ${r.risk}\n   └ [대책] ${r.measure}`)
             .join('\n\n');
 
          // Format Feedback
-         const feedback = entry.safetyFeedback.join('\n');
+         const feedback = (entry.safetyFeedback || []).join('\n');
 
          // CSV Row Data
          return [
