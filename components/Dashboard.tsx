@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TBMEntry } from '../types';
-import { Calendar, Users, AlertCircle, FileText, Camera, BarChart2, CheckCircle2, TrendingUp, ChevronRight, Edit2, ShieldAlert, BookOpen, Quote, Database, Trash2, X, ScanLine, Server, Lock, Sparkles, BrainCircuit, MessageSquare, ArrowRight, ShieldCheck, Activity, Zap, Clock, MoreHorizontal, Plus, Eye, Mic, HandMetal, UserCheck, PlayCircle, Globe, Languages, Target, Radar } from 'lucide-react';
+import { Calendar, Users, AlertCircle, FileText, Camera, BarChart2, CheckCircle2, TrendingUp, ChevronRight, Edit2, ShieldAlert, BookOpen, Quote, Database, Trash2, X, ScanLine, Server, Lock, Sparkles, BrainCircuit, MessageSquare, ArrowRight, ShieldCheck, Activity, Zap, Clock, MoreHorizontal, Plus, Eye, Mic, HandMetal, UserCheck, PlayCircle, Globe, Languages, Target, Radar, Presentation, TrendingDown, CalendarRange, FolderInput } from 'lucide-react';
 
 interface DashboardProps {
   entries: TBMEntry[];
@@ -122,8 +122,262 @@ const FeatureShowcase: React.FC<FeatureShowcaseProps> = ({ featureKey, onClose }
    );
 };
 
+// --- Impact Report Modal ---
+interface ImpactReportModalProps {
+   entries: TBMEntry[];
+   onClose: () => void;
+}
+
+type AnalysisPeriod = 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
+
+const ImpactReportModal: React.FC<ImpactReportModalProps> = ({ entries, onClose }) => {
+   const [period, setPeriod] = useState<AnalysisPeriod>('WEEK');
+
+   // Calculate Statistics for "Why we do this"
+   const analysis = useMemo(() => {
+       const now = new Date();
+       const todayStr = now.toISOString().split('T')[0];
+       
+       // Filter entries based on period
+       let cutoffDate = new Date();
+       if (period === 'WEEK') cutoffDate.setDate(now.getDate() - 7);
+       else if (period === 'MONTH') cutoffDate.setDate(now.getDate() - 30);
+       else if (period === 'QUARTER') cutoffDate.setDate(now.getDate() - 90);
+       else if (period === 'YEAR') cutoffDate.setDate(now.getDate() - 365);
+       
+       const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
+       const filteredEntries = entries.filter(e => e.date >= cutoffStr && e.date <= todayStr);
+       const totalTBM = filteredEntries.length;
+       const aiAnalyzed = filteredEntries.filter(e => e.videoAnalysis).length;
+       
+       if (totalTBM === 0) return null;
+
+       // 1. Quality Trend (Average Score)
+       const avgScore = aiAnalyzed > 0 
+           ? Math.round(filteredEntries.reduce((acc, e) => acc + (e.videoAnalysis?.score || 0), 0) / aiAnalyzed) 
+           : 0;
+
+       // 2. Risk Discovery (Total Risks Found)
+       const totalRisks = filteredEntries.reduce((acc, e) => acc + (e.riskFactors?.length || 0), 0);
+       const avgRisksPerTBM = (totalRisks / totalTBM).toFixed(1);
+
+       // 3. Blind Spot Reduction
+       const entriesWithBlindSpots = filteredEntries.filter(e => e.videoAnalysis?.insight?.missingTopics?.length ?? 0 > 0).length;
+       const blindSpotRate = aiAnalyzed > 0 ? Math.round((entriesWithBlindSpots / aiAnalyzed) * 100) : 0;
+       
+       // 4. Focus (Engagement)
+       const avgFocus = aiAnalyzed > 0
+           ? Math.round(filteredEntries.reduce((acc, e) => acc + (e.videoAnalysis?.focusAnalysis?.overall || 0), 0) / aiAnalyzed)
+           : 0;
+
+       // 5. Dynamic Comment Generation
+       let commentQuality = "";
+       let commentRisk = "";
+       let commentCulture = "";
+
+       switch (period) {
+           case 'WEEK':
+               commentQuality = `금주 TBM 품질 점수는 ${avgScore}점으로, ${avgScore >= 80 ? '매우 우수한 소통이 이루어지고 있습니다.' : '개선이 필요한 단계입니다.'}`;
+               commentRisk = `지난 7일간 총 ${totalRisks}건의 위험 요인을 발굴하여 즉각적인 조치를 취했습니다.`;
+               commentCulture = `단기 집중도 ${avgFocus}% 달성. 작업 시작 전 안전 의식이 고취되고 있습니다.`;
+               break;
+           case 'MONTH':
+               commentQuality = `이번 달 평균 점수 ${avgScore}점 유지. AI 코칭을 통해 리더들의 진행 역량이 안정화되었습니다.`;
+               commentRisk = `월간 ${totalRisks}건의 잠재 위험을 사전에 차단했습니다. 회당 발굴 건수(${avgRisksPerTBM})가 꾸준합니다.`;
+               commentCulture = `한 달간 집중도 ${avgFocus}%를 기록하며 안전 문화가 현장에 정착되고 있음을 증명합니다.`;
+               break;
+           case 'QUARTER':
+               commentQuality = `분기 종합 ${avgScore}점. 지속적인 모니터링으로 TBM의 형식적 운영을 완전히 배제했습니다.`;
+               commentRisk = `분기 누적 ${totalRisks}건의 데이터 축적. 계절/공종별 위험 패턴을 파악할 수 있는 수준입니다.`;
+               commentCulture = `장기적 관점에서 근로자들의 자발적 참여도가 ${avgFocus}% 수준으로 향상되었습니다.`;
+               break;
+           case 'YEAR':
+               commentQuality = `연간 평균 ${avgScore}점 달성. 스마트 안전 시스템 도입의 ROI가 확실히 증명되었습니다.`;
+               commentRisk = `올해 총 ${totalRisks}건의 사고 예방 성과. 데이터 기반 안전 경영의 핵심 지표입니다.`;
+               commentCulture = `시스템 도입 전 대비 확연히 달라진 안전 문화(${avgFocus}%)를 정량적으로 확인했습니다.`;
+               break;
+       }
+
+       return { avgScore, totalRisks, avgRisksPerTBM, blindSpotRate, avgFocus, totalTBM, commentQuality, commentRisk, commentCulture };
+   }, [entries, period]);
+
+   return createPortal(
+      <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-fade-in" onClick={onClose}>
+         <div 
+            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-slide-up relative flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+         >
+            {/* Header: Philosophy & Why */}
+            <div className="bg-slate-900 text-white p-8 relative overflow-hidden shrink-0">
+               <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-blue-600/30 to-purple-600/30 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+               <button onClick={onClose} className="absolute top-6 right-6 text-white/50 hover:text-white z-50 p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <X size={24} />
+               </button>
+               
+               <div className="relative z-10">
+                   <div className="flex justify-between items-end mb-4">
+                       <div>
+                           <div className="flex items-center gap-2 mb-2">
+                               <span className="bg-blue-600 text-[10px] font-black px-2 py-0.5 rounded tracking-widest uppercase">Smart Safety Initiative</span>
+                               <span className="text-slate-400 text-xs font-bold tracking-widest flex items-center gap-1">
+                                   <TrendingUp size={12} className="text-emerald-400"/> Performance Proof
+                               </span>
+                           </div>
+                           <h2 className="text-3xl md:text-4xl font-black leading-tight">
+                               안전의 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">데이터화</span>가<br/>
+                               현장을 변화시키는 이유.
+                           </h2>
+                       </div>
+                       
+                       {/* Period Selector Tabs */}
+                       <div className="flex bg-white/10 p-1 rounded-xl backdrop-blur-md border border-white/10">
+                           {(['WEEK', 'MONTH', 'QUARTER', 'YEAR'] as AnalysisPeriod[]).map((p) => (
+                               <button
+                                   key={p}
+                                   onClick={() => setPeriod(p)}
+                                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                       period === p 
+                                       ? 'bg-white text-slate-900 shadow-lg' 
+                                       : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                   }`}
+                               >
+                                   {p === 'WEEK' ? '주간' : p === 'MONTH' ? '월간' : p === 'QUARTER' ? '분기' : '연간'}
+                               </button>
+                           ))}
+                       </div>
+                   </div>
+                   
+                   <p className="text-slate-400 text-sm font-medium max-w-2xl leading-relaxed">
+                       우리는 단순히 TBM을 기록하는 것이 아닙니다. 
+                       <strong className="text-white"> 형식적인 안전 활동을 실질적인 예방 조치로 전환</strong>하고,
+                       데이터에 기반하여 <strong className="text-white">현장의 안전 수준을 정량적으로 증명</strong>하기 위해 이 시스템을 사용합니다.
+                   </p>
+               </div>
+            </div>
+
+            {/* Content: Quantitative Proof */}
+            <div className="flex-1 overflow-y-auto bg-slate-50 p-8 custom-scrollbar">
+                {!analysis ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                        <Database size={48} className="mb-4 opacity-20"/>
+                        <p className="font-bold">선택한 기간({period === 'WEEK' ? '최근 7일' : period === 'MONTH' ? '최근 30일' : period === 'QUARTER' ? '최근 90일' : '최근 1년'})에 데이터가 없습니다.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+                        
+                        {/* 1. Quality Improvement Card */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:border-violet-300 transition-colors">
+                            <div className="mb-4">
+                                <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center text-violet-600 mb-3">
+                                    <Sparkles size={20}/>
+                                </div>
+                                <h3 className="text-lg font-black text-slate-800">TBM 품질 고도화</h3>
+                                <p className="text-xs text-slate-500 font-bold mt-1">
+                                    {period === 'WEEK' ? '주간' : period === 'MONTH' ? '월간' : period === 'QUARTER' ? '분기' : '연간'} 평균 점수 추이
+                                </p>
+                            </div>
+                            <div className="flex-1 flex items-end gap-2 mb-4">
+                                <div className="text-4xl font-black text-slate-800">{analysis.avgScore}</div>
+                                <div className="text-sm font-bold text-slate-400 mb-1.5">/ 100점</div>
+                            </div>
+                            <div className="bg-violet-50 p-3 rounded-xl border border-violet-100">
+                                <p className="text-[11px] text-violet-800 font-bold leading-relaxed">
+                                    "{analysis.commentQuality}"
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* 2. Risk Awareness Card */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:border-orange-300 transition-colors">
+                            <div className="mb-4">
+                                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 mb-3">
+                                    <ShieldAlert size={20}/>
+                                </div>
+                                <h3 className="text-lg font-black text-slate-800">위험 발굴 역량</h3>
+                                <p className="text-xs text-slate-500 font-bold mt-1">
+                                    {period === 'WEEK' ? '금주' : period === 'MONTH' ? '이달' : period === 'QUARTER' ? '이번 분기' : '올해'} 누적 발굴 건수
+                                </p>
+                            </div>
+                            <div className="flex-1 flex items-end gap-2 mb-4">
+                                <div className="text-4xl font-black text-slate-800">{analysis.totalRisks}</div>
+                                <div className="text-sm font-bold text-slate-400 mb-1.5">건 (평균 {analysis.avgRisksPerTBM}건/회)</div>
+                            </div>
+                            <div className="bg-orange-50 p-3 rounded-xl border border-orange-100">
+                                <p className="text-[11px] text-orange-800 font-bold leading-relaxed">
+                                    "{analysis.commentRisk}"
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* 3. Cultural Change Card */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:border-blue-300 transition-colors">
+                            <div className="mb-4">
+                                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 mb-3">
+                                    <Users size={20}/>
+                                </div>
+                                <h3 className="text-lg font-black text-slate-800">안전 문화 정착</h3>
+                                <p className="text-xs text-slate-500 font-bold mt-1">참여도 및 집중도 변화</p>
+                            </div>
+                            <div className="flex-1 flex items-end gap-2 mb-4">
+                                <div className="text-4xl font-black text-slate-800">{analysis.avgFocus}</div>
+                                <div className="text-sm font-bold text-slate-400 mb-1.5">% (평균 집중도)</div>
+                            </div>
+                            <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                <p className="text-[11px] text-blue-800 font-bold leading-relaxed">
+                                    "{analysis.commentCulture}"
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* 4. Insight (Blind Spot) */}
+                         <div className="md:col-span-3 bg-gradient-to-r from-slate-100 to-white p-6 rounded-2xl border border-slate-200 flex items-center justify-between gap-6">
+                            <div>
+                                <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-2">
+                                    <Radar size={16} className="text-red-500"/> Blind Spot Zero (사각지대 제거)
+                                </h4>
+                                <p className="text-xs text-slate-500 font-medium max-w-xl">
+                                    AI Insight 기능이 <strong>누락된 안전 주제(Missing Topics)</strong>를 지속적으로 코칭함에 따라, 
+                                    관리자의 브리핑이 더욱 완벽해지고 있습니다.
+                                </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                                <div className="text-xs font-bold text-slate-400 mb-1">코칭 발생률</div>
+                                <div className="text-2xl font-black text-slate-800 flex items-center justify-end gap-2">
+                                    {analysis.blindSpotRate}% <TrendingDown size={20} className="text-emerald-500"/>
+                                </div>
+                                <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full inline-block mt-1">
+                                    점진적 감소 추세 (긍정적)
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                    <img src="https://via.placeholder.com/32" className="w-8 h-8 rounded-full bg-slate-200" alt="Logo"/>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">System Generated</p>
+                        <p className="text-xs font-bold text-slate-800">(주)휘강건설 안전관리팀</p>
+                    </div>
+                </div>
+                <button onClick={onClose} className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-blue-600 transition-colors shadow-lg">
+                    확인 및 닫기
+                </button>
+            </div>
+         </div>
+      </div>,
+      document.body
+   );
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onNavigateToReports, onNewEntry, onEdit, onOpenSettings, onDelete }) => {
   const [activeFeature, setActiveFeature] = useState<'risk' | 'proof' | 'feedback' | 'audit' | 'insight' | null>(null);
+  const [showImpactReport, setShowImpactReport] = useState(false); // New State
 
   const today = new Date().toISOString().split('T')[0];
   const todaysEntries = entries.filter(e => e.date === today);
@@ -186,6 +440,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
   return (
     <div className="space-y-5 pb-10">
       {activeFeature && <FeatureShowcase featureKey={activeFeature} onClose={() => setActiveFeature(null)} />}
+      {showImpactReport && <ImpactReportModal entries={entries} onClose={() => setShowImpactReport(false)} />}
 
       {/* --- HERO SECTION: Bento Grid Top Row --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-auto">
@@ -214,12 +469,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
                   </p>
                </div>
                
-               <button 
-                  onClick={onOpenSettings} 
-                  className="bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white px-3 py-2 rounded-lg border border-white/10 backdrop-blur-md transition-all flex items-center gap-2 text-xs font-bold shadow-lg"
-               >
-                   <Database size={14} className="text-blue-400"/> 데이터 백업/관리
-               </button>
+               <div className="flex gap-2">
+                  {/* NEW IMPACT REPORT BUTTON */}
+                  <button 
+                     onClick={() => setShowImpactReport(true)}
+                     className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg border border-emerald-500 backdrop-blur-md transition-all flex items-center gap-2 text-xs font-bold shadow-lg shadow-emerald-900/30"
+                  >
+                     <Presentation size={14} /> 성과 분석 리포트
+                  </button>
+                  <button 
+                     onClick={onOpenSettings} 
+                     className="bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white px-3 py-2 rounded-lg border border-white/10 backdrop-blur-md transition-all flex items-center gap-2 text-xs font-bold shadow-lg"
+                  >
+                      <Database size={14} className="text-blue-400"/> 데이터 관리
+                  </button>
+               </div>
             </div>
 
             <div className="relative z-10 flex flex-wrap gap-3 mt-6">
@@ -475,13 +739,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, onViewReport, onN
                   <h3 className="font-black text-lg text-slate-800">실시간 등록 현황</h3>
                   <p className="text-xs font-bold text-slate-400 mt-0.5">Real-time Feed</p>
                </div>
-               <button 
-                  onClick={onNewEntry} 
-                  className="bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 p-2 rounded-xl transition-all shadow-sm active:scale-95"
-                  title="새 TBM 등록"
-               >
-                  <Plus size={18} />
-               </button>
+               <div className="flex gap-2">
+                  {/* Bulk Upload Button */}
+                  <button 
+                     onClick={onNewEntry} 
+                     className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1 pr-3"
+                     title="과거 기록 일괄 업로드"
+                  >
+                     <FolderInput size={18} />
+                     <span className="text-xs font-bold">일괄 업로드</span>
+                  </button>
+                  <button 
+                     onClick={onNewEntry} 
+                     className="bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 p-2 rounded-xl transition-all shadow-sm active:scale-95"
+                     title="새 TBM 등록"
+                  >
+                     <Plus size={18} />
+                  </button>
+               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">

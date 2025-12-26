@@ -38,6 +38,9 @@ export interface TBMAnalysisResult {
   score: number; // 0 to 100
   evaluation: string; // One line summary
   
+  // [NEW] Analysis Source Indicator
+  analysisSource: 'DOCUMENT' | 'VIDEO'; 
+
   // Basic Metrics
   details: {
     participation: 'GOOD' | 'BAD' | 'MODERATE';
@@ -65,6 +68,16 @@ export interface TBMAnalysisResult {
   };
 
   feedback: string[]; // Specific feedback points
+}
+
+// [NEW] Interface for raw extracted data before saving as entry
+export interface ExtractedTBMData {
+  teamName: string;
+  leaderName: string;
+  attendeesCount: number;
+  workDescription: string;
+  riskFactors: RiskAssessmentItem[];
+  safetyFeedback: string[];
 }
 
 export interface TBMEntry {

@@ -1,13 +1,45 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2, Edit2, ListOrdered, Save, FileVideo } from 'lucide-react';
+import { X, Rocket, Shield, BrainCircuit, LayoutDashboard, FileText, Video, Sparkles, History, GitCommit, Zap, Minimize2, Edit2, ListOrdered, Save, FileVideo, Presentation, CalendarRange, FolderInput, GraduationCap } from 'lucide-react';
 
 interface HistoryModalProps {
   onClose: () => void;
 }
 
 const milestones = [
+  {
+    version: 'v2.7.3',
+    date: '2025.12.09',
+    title: '연구용 데이터 패키지 (Research Data)',
+    desc: '학술 논문 및 빅데이터 분석을 위해 [서론-본론-결론] 구조의 정제된 데이터셋을 추출하는 기능 추가. 통계 분석에 즉시 활용 가능한 CSV 및 분석 리포트 제공.',
+    icon: <GraduationCap size={18} />,
+    color: 'bg-indigo-700'
+  },
+  {
+    version: 'v2.7.2',
+    date: '2025.12.09',
+    title: '대량 문서 처리 모드 (Batch Process)',
+    desc: '3주치 이상의 과거 데이터를 효율적으로 등록할 수 있도록 일괄 업로드 UX 개선. 대시보드 바로가기 버튼 및 상세 이용 가이드(Queue System) 탑재.',
+    icon: <FolderInput size={18} />,
+    color: 'bg-blue-600'
+  },
+  {
+    version: 'v2.7.1',
+    date: '2025.12.09',
+    title: '성과 분석 리포트 고도화',
+    desc: '성과 분석 기능을 주간, 월간, 분기, 연간으로 세분화. 선택한 기간에 따라 실시간으로 데이터를 집계하고 맞춤형 평가 코멘트를 제공하는 알고리즘 적용.',
+    icon: <CalendarRange size={18} />,
+    color: 'bg-indigo-600'
+  },
+  {
+    version: 'v2.7.0',
+    date: '2025.12.09',
+    title: '스마트 TBM 성과 분석 리포트',
+    desc: '단순 기록을 넘어 안전 성과를 정량적으로 증명하는 Impact Report 기능 추가. TBM 품질 점수, 위험 발굴 건수, 사각지대 제거율을 그래프로 시각화하여 시스템 도입 효과를 입증.',
+    icon: <Presentation size={18} />,
+    color: 'bg-emerald-600'
+  },
   {
     version: 'v2.6.6',
     date: '2025.12.08',

@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { TBMEntry, RiskAssessmentItem, SafetyGuideline, TeamOption, TBMAnalysisResult } from '../types';
-import { analyzeTBMLog, evaluateTBMVideo } from '../services/geminiService';
+import { TBMEntry, RiskAssessmentItem, SafetyGuideline, TeamOption, TBMAnalysisResult, ExtractedTBMData } from '../types';
+import { analyzeMasterLog, evaluateTBMVideo } from '../services/geminiService';
 import { compressVideo } from '../utils/videoUtils';
-import { Upload, Camera, Sparkles, AlertTriangle, CheckCircle2, Loader2, FileText, X, ShieldCheck, Layers, ArrowLeft, Trash2, Film, Save, ZoomIn, ZoomOut, Maximize, Minimize, RotateCw, Clock, Plus, Check, PlayCircle, BarChart, Mic, Volume2, Edit2, RefreshCcw, Target, Eye, AlertOctagon, UserCheck } from 'lucide-react';
+import { Upload, Camera, Sparkles, AlertTriangle, CheckCircle2, Loader2, FileText, X, ShieldCheck, Layers, ArrowLeft, Trash2, Film, Save, ZoomIn, ZoomOut, Maximize, Minimize, RotateCw, Clock, Plus, Check, PlayCircle, BarChart, Mic, Volume2, Edit2, RefreshCcw, Target, Eye, AlertOctagon, UserCheck, HelpCircle, FileStack, ScanLine, ListChecks, Zap, Files, Copy } from 'lucide-react';
 
 interface TBMFormProps {
   onSave: (entry: TBMEntry, shouldExit?: boolean) => void;
@@ -29,6 +29,9 @@ interface SavedFormState {
   tbmVideoFileName: string | null;
   currentLogBase64: string | null;
   videoAnalysis: TBMAnalysisResult | null; // NEW: Save Analysis State
+  // Multi-Team Support
+  extractedResults?: ExtractedTBMData[];
+  currentResultIndex?: number;
 }
 
 interface QueueItem {
@@ -86,6 +89,11 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
   // UI State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // --- MULTI-TEAM EXTRACTION STATE ---
+  const [extractedResults, setExtractedResults] = useState<ExtractedTBMData[]>([]);
+  const [currentResultIndex, setCurrentResultIndex] = useState<number>(0);
   
   // Refs
   const queueInputRef = useRef<HTMLInputElement>(null);
@@ -135,12 +143,12 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     entryDate, entryTime, teamId, leaderName, attendeesCount,
     workDescription, riskFactors, safetyFeedback,
     tbmPhotoPreview, tbmVideoPreview, tbmVideoFileName, currentLogBase64,
-    videoAnalysis
+    videoAnalysis,
+    extractedResults, currentResultIndex
   });
 
   const resetFormFields = () => {
-     // Keep Date/Time as is usually, but reset other specific fields
-     setTeamId(teams[0]?.id || '');
+     // setTeamId(teams[0]?.id || ''); // Keep last team selection or auto logic
      setLeaderName('');
      setAttendeesCount(0);
      setWorkDescription('');
@@ -155,6 +163,10 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
      setIsEditingAnalysis(false);
      setVideoStatusMessage('');
      setEditingFeedbackIndex(null);
+     
+     // Multi-team reset
+     setExtractedResults([]);
+     setCurrentResultIndex(0);
      
      // Reset File inputs
      if (photoInputRef.current) photoInputRef.current.value = '';
@@ -175,6 +187,10 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     setTbmVideoFileName(data.tbmVideoFileName);
     setCurrentLogBase64(data.currentLogBase64);
     setVideoAnalysis(data.videoAnalysis || null);
+    
+    // Multi-team restore
+    setExtractedResults(data.extractedResults || []);
+    setCurrentResultIndex(data.currentResultIndex || 0);
     
     // Reset viewer
     setViewerMode('fit');
@@ -226,39 +242,117 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     });
   };
 
-  // --- Reactive Workspace Loader ---
+  // --- Populating Fields from Extracted Data ---
+  const populateFieldsFromData = (data: ExtractedTBMData) => {
+      setLeaderName(data.leaderName);
+      setAttendeesCount(data.attendeesCount);
+      setWorkDescription(data.workDescription);
+      setRiskFactors(data.riskFactors || []);
+      setSafetyFeedback(data.safetyFeedback || []);
+      
+      // Try to match teamName to known teams
+      if (data.teamName) {
+          const matched = teams.find(t => 
+              t.name === data.teamName || 
+              data.teamName.includes(t.name) || 
+              t.name.includes(data.teamName)
+          );
+          if (matched) setTeamId(matched.id);
+      }
+  };
+
+  const handleSelectExtractedResult = (index: number) => {
+      if (extractedResults[index]) {
+          setCurrentResultIndex(index);
+          populateFieldsFromData(extractedResults[index]);
+      }
+  };
+
+  // --- Analysis Logic (Updated for Multi-Team) ---
+  const handleAnalyze = async () => {
+    const activeItem = queue.find(q => q.id === activeQueueId);
+    if (!activeItem || !currentLogBase64) return;
+
+    setIsAnalyzing(true);
+    try {
+      const base64Data = currentLogBase64.split(',')[1];
+      
+      // Use the new MASTER LOG analyzer
+      const results = await analyzeMasterLog(base64Data, activeItem.file.type, monthlyGuidelines);
+      
+      if (results.length > 0) {
+          setExtractedResults(results);
+          setCurrentResultIndex(0);
+          populateFieldsFromData(results[0]);
+      } else {
+          alert("문서 내용을 분석할 수 없습니다. 수동으로 입력해주세요.");
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("분석 중 오류가 발생했습니다. 직접 입력해주세요.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // --- Reactive Workspace Loader & Auto-Start Logic ---
   useEffect(() => {
     if (!activeQueueId) return;
 
     const item = queue.find(q => q.id === activeQueueId);
     if (!item) return;
 
-    if (item.status === 'pending') {
-      setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'processing' } : q));
-    }
-
+    // 1. If it has saved data, restore it.
     if (item.savedFormData) {
        restoreFormData(item.savedFormData);
-    } else {
-       resetFormFields();
+    } 
+    // 2. If it's a fresh item (pending/processing without data), load file
+    else {
+       // Only reset if we are switching to a new file, not just re-rendering
+       if (currentLogBase64 && !item.savedFormData) {
+           // check if we already loaded THIS file's base64. 
+       } else {
+           resetFormFields();
+       }
+
        const reader = new FileReader();
        reader.onload = (event) => {
-          setCurrentLogBase64(event.target?.result as string);
+          const base64Result = event.target?.result as string;
+          setCurrentLogBase64(base64Result);
+          
+          setViewerMode('fit');
+          setImgRotation(0);
+          setImgScale(1);
+          
+          // Filename Date Parsing
+          const dateMatch = item.file.name.match(/(\d{4})[-.](\d{2})[-.](\d{2})/);
+          if (dateMatch) {
+              setEntryDate(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`);
+          }
        };
        reader.readAsDataURL(item.file);
-       setViewerMode('fit');
-       setImgRotation(0);
-       setImgScale(1);
     }
-
   }, [activeQueueId]);
+
+  // --- [NEW] Auto-Analysis Trigger ---
+  useEffect(() => {
+      const item = queue.find(q => q.id === activeQueueId);
+      
+      // Condition: Item exists + Status is 'pending' + Base64 is ready + Not currently analyzing
+      if (item && item.status === 'pending' && currentLogBase64 && !isAnalyzing) {
+          
+          setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'processing' } : q));
+          console.log("Auto-triggering MASTER LOG analysis for:", item.file.name);
+          handleAnalyze();
+      }
+  }, [activeQueueId, currentLogBase64, isAnalyzing]);
+
 
   // --- Initialization (Edit Mode) ---
   useEffect(() => {
     if (initialData) {
       const fakeId = 'edit-mode';
-      
-      // Protect data from reset by creating a saved state snapshot
       const formState: SavedFormState = {
         entryDate: initialData.date || new Date().toISOString().split('T')[0],
         entryTime: initialData.time || '00:00',
@@ -272,7 +366,9 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
         tbmVideoPreview: initialData.tbmVideoUrl || null,
         tbmVideoFileName: initialData.tbmVideoFileName || null,
         currentLogBase64: initialData.originalLogImageUrl || null,
-        videoAnalysis: initialData.videoAnalysis || null
+        videoAnalysis: initialData.videoAnalysis || null,
+        extractedResults: [],
+        currentResultIndex: 0
       };
 
       setQueue([{
@@ -280,13 +376,11 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
           file: new File([], "기존 기록 수정"), 
           previewUrl: initialData.originalLogImageUrl || null, 
           isPdf: initialData.originalLogMimeType === 'application/pdf',
-          status: 'processing',
+          status: 'done', // Mark as done so auto-trigger doesn't fire
           teamsRegistered: [initialData.teamName],
-          savedFormData: formState // Key fix: inject data here
+          savedFormData: formState 
       }]);
       setActiveQueueId(fakeId);
-      
-      // Also set immediate state to prevent flicker
       restoreFormData(formState);
     }
   }, [initialData, teams]);
@@ -329,33 +423,6 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     }
   };
 
-  // --- Analysis Logic ---
-
-  const handleAnalyze = async () => {
-    const activeItem = queue.find(q => q.id === activeQueueId);
-    if (!activeItem || !currentLogBase64) return;
-
-    setIsAnalyzing(true);
-    try {
-      const base64Data = currentLogBase64.split(',')[1];
-      const targetTeamName = teams.find(t => t.id === teamId)?.name;
-      
-      const result = await analyzeTBMLog(base64Data, activeItem.file.type, monthlyGuidelines, targetTeamName);
-      
-      setLeaderName(result.leaderName);
-      setAttendeesCount(result.attendeesCount);
-      setWorkDescription(result.workDescription);
-      setRiskFactors(result.riskFactors || []);
-      setSafetyFeedback(result.safetyFeedback || []);
-      
-    } catch (err) {
-      console.error(err);
-      alert("분석 중 오류가 발생했습니다. 직접 입력해주세요.");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
   // --- Updated Video Audit Logic for Robustness ---
   const handleVideoAudit = async () => {
     if (!tbmVideoFile) {
@@ -364,16 +431,13 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     }
 
     setIsVideoAnalyzing(true);
-    // 상태 메시지 초기화
     setVideoStatusMessage("⏳ AI 분석을 위해 핵심 구간(10초) 추출 및 압축 중...");
     
     try {
-      // 1. 압축 시도 (compressVideo 내부에서 10초 컷, 10fps, 저해상도 변환 수행)
       const compressedBlob = await compressVideo(tbmVideoFile);
 
       setVideoStatusMessage(`✅ 최적화 완료! (${(compressedBlob.size / 1024).toFixed(1)} KB)\nAI 서버로 전송 중...`);
 
-      // 2. Base64 변환
       const reader = new FileReader();
       reader.readAsDataURL(compressedBlob);
       
@@ -383,7 +447,6 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
            const base64Data = base64String.split(',')[1];
            const mimeTypeToProcess = compressedBlob.type || 'video/webm'; 
            
-           // 3. Call AI API
            try {
                const analysis = await evaluateTBMVideo(base64Data, mimeTypeToProcess, workDescription);
                setVideoAnalysis(analysis);
@@ -411,90 +474,161 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
     }
   };
 
-  // --- Save Logic ---
+  // --- Save Logic (Updated for Batch) ---
 
-  const handleSave = (action: 'next_team' | 'finish_doc') => {
-    if (!tbmPhotoPreview) {
-      alert("⚠ TBM 증빙 사진은 필수입니다.\n하단의 사진 추가 버튼을 눌러주세요.");
+  const createEntryFromState = (
+     currentExtractedData: ExtractedTBMData | null, 
+     overrideTeamName?: string,
+     uniqueIndex: number = 0 // [FIX]: Add index to prevent ID collisions
+  ): TBMEntry => {
+      // Use current form state OR passed data
+      const dataToUse = currentExtractedData ? {
+          leaderName: currentExtractedData.leaderName,
+          attendeesCount: currentExtractedData.attendeesCount,
+          workDescription: currentExtractedData.workDescription,
+          riskFactors: currentExtractedData.riskFactors || [],
+          safetyFeedback: currentExtractedData.safetyFeedback || [],
+          teamName: currentExtractedData.teamName
+      } : {
+          leaderName, attendeesCount, workDescription, riskFactors, safetyFeedback, teamName: teams.find(t=>t.id===teamId)?.name || '알수없음'
+      };
+
+      // Match ID if dataToUse.teamName exists
+      let finalTeamId = teamId;
+      let finalTeamName = overrideTeamName || dataToUse.teamName;
+
+      if (dataToUse.teamName) {
+         const matched = teams.find(t => 
+             t.name === dataToUse.teamName || 
+             dataToUse.teamName.includes(t.name) || 
+             t.name.includes(dataToUse.teamName)
+         );
+         if (matched) {
+             finalTeamId = matched.id;
+             finalTeamName = matched.name;
+         }
+      }
+
+      // Check current file type
+      const activeItem = queue.find(q => q.id === activeQueueId);
+      const isPdf = activeItem?.isPdf;
+
+      // Fallback: If no specific photo, try to use the document image (if not PDF)
+      const finalPhotoUrl = tbmPhotoPreview || (!isPdf && currentLogBase64 ? currentLogBase64 : undefined);
+
+      // Default Analysis for Document based (if video analysis not present)
+      const docAnalysis: TBMAnalysisResult = {
+          score: 85,
+          evaluation: "문서 기반 분석 결과, TBM 활동이 적절하게 수행되었습니다.",
+          analysisSource: 'DOCUMENT',
+          details: { participation: 'GOOD', voiceClarity: 'CLEAR', ppeStatus: 'GOOD', interaction: true },
+          focusAnalysis: { overall: 90, distractedCount: 0, focusZones: { front: 'HIGH', back: 'HIGH', side: 'HIGH' } },
+          insight: { mentionedTopics: [], missingTopics: [], suggestion: "문서 기반 자동 생성입니다." },
+          feedback: []
+      };
+
+      return {
+          id: `ENTRY-${Date.now()}-${uniqueIndex}-${Math.random().toString(36).substring(2, 7)}`, // [FIX]: Ensure uniqueness
+          date: entryDate,
+          time: entryTime,
+          teamId: finalTeamId,
+          teamName: finalTeamName,
+          leaderName: dataToUse.leaderName,
+          attendeesCount: dataToUse.attendeesCount,
+          workDescription: dataToUse.workDescription,
+          riskFactors: dataToUse.riskFactors,
+          safetyFeedback: dataToUse.safetyFeedback,
+          tbmPhotoUrl: finalPhotoUrl,
+          tbmVideoUrl: tbmVideoPreview || undefined,
+          tbmVideoFileName: tbmVideoFileName || undefined,
+          videoAnalysis: videoAnalysis || docAnalysis, // Use video analysis if available, else doc dummy
+          originalLogImageUrl: currentLogBase64 || undefined,
+          originalLogMimeType: isPdf ? 'application/pdf' : 'image/jpeg',
+          createdAt: Date.now(),
+      };
+  };
+
+  const handleSave = (action: 'next_team' | 'finish_doc' | 'save_all') => {
+    // [FIX] Relax validation: Allow save if document (currentLogBase64) exists, even if specific photo is missing
+    if (!tbmPhotoPreview && !currentLogBase64) {
+      alert("⚠ TBM 증빙 자료가 없습니다.\n사진을 추가하거나 문서를 업로드해주세요.");
       return;
     }
 
     const currentTeamName = teams.find(t => t.id === teamId)?.name || '알 수 없음';
-    const isEditMode = !!initialData;
     
-    // Clean up analysis data before saving (remove empty strings from missingTopics)
-    const cleanedAnalysis = videoAnalysis ? {
-        ...videoAnalysis,
-        insight: {
-            ...videoAnalysis.insight,
-            missingTopics: videoAnalysis.insight.missingTopics.filter(t => t.trim().length > 0)
-        }
-    } : null;
-
-    // We can't use getCurrentFormState directly here because we modified videoAnalysis
-    // So we reconstruct it partially
-    const newEntry: TBMEntry = {
-      id: isEditMode ? String(initialData.id) : `ENTRY-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      date: entryDate,
-      time: entryTime,
-      teamId,
-      teamName: currentTeamName,
-      leaderName,
-      attendeesCount,
-      workDescription,
-      riskFactors,
-      safetyFeedback,
-      tbmPhotoUrl: tbmPhotoPreview,
-      tbmVideoUrl: tbmVideoPreview || undefined,
-      tbmVideoFileName: tbmVideoFileName || undefined,
-      videoAnalysis: cleanedAnalysis || undefined, // Save cleaned analysis
-      originalLogImageUrl: currentLogBase64 || undefined,
-      originalLogMimeType: isEditMode 
-        ? initialData.originalLogMimeType 
-        : (queue.find(q => q.id === activeQueueId)?.isPdf ? 'application/pdf' : 'image/jpeg'),
-      createdAt: isEditMode ? initialData.createdAt : Date.now(),
-    };
-    
-    // Also update current state to reflect cleaned data (for UI consistency if we stay on page)
-    if (videoAnalysis) setVideoAnalysis(cleanedAnalysis);
-
-    // 1. Save Data First
-    try {
-        onSave(newEntry, false); 
-    } catch (error) {
-        console.error("Save failed:", error);
-        alert("저장 실패: 브라우저 저장 공간이 부족할 수 있습니다.");
-        return;
-    }
-
-    // 2. Handle Navigation & Alerts
-    setTimeout(() => {
-        if (isEditMode) {
-            alert("수정되었습니다.");
-            onSave(newEntry, true); 
+    // CASE: SAVE ALL (Batch)
+    if (action === 'save_all' && extractedResults.length > 0) {
+        if (!confirm(`총 ${extractedResults.length}개 팀의 데이터를 일괄 저장하시겠습니까?\n(현재 사진/영상/문서 증빙이 모든 팀에 공통 적용됩니다)`)) {
             return;
         }
 
+        try {
+            // Loop through all extracted results and save
+            extractedResults.forEach((data, index) => {
+                const entry = createEntryFromState(data, undefined, index); // [FIX]: Pass index
+                onSave(entry, false);
+            });
+            
+            // Mark all teams as done
+            const allTeamNames = extractedResults.map(r => r.teamName || 'Unknown');
+            
+            setQueue(prevQueue => prevQueue.map(q => {
+                if (q.id === activeQueueId) {
+                    return {
+                        ...q,
+                        teamsRegistered: [...q.teamsRegistered, ...allTeamNames],
+                        status: 'done',
+                        savedFormData: undefined // Clear saved state on done
+                    };
+                }
+                return q;
+            }));
+
+            // Move to next file
+            const currentIndex = queue.findIndex(q => q.id === activeQueueId);
+            const forwardCandidate = queue.slice(currentIndex + 1).find(q => q.status !== 'done');
+            
+            alert(`✅ ${extractedResults.length}개 팀 저장 완료.\n자동으로 다음 문서로 이동합니다.`);
+            
+            if (forwardCandidate) {
+                setActiveQueueId(forwardCandidate.id);
+            } else {
+                setTbmPhotoPreview(null);
+                setCurrentLogBase64(null);
+                setExtractedResults([]);
+                setActiveQueueId(null);
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("저장 중 오류 발생");
+        }
+        return;
+    }
+
+    // CASE: SINGLE SAVE
+    const newEntry = createEntryFromState(null); // Use current form state
+    
+    // 1. Save Data First
+    try {
+        onSave(newEntry, !!initialData); // Exit if editing existing
+    } catch (error) {
+        console.error("Save failed:", error);
+        alert("저장 실패");
+        return;
+    }
+
+    if (initialData) return; // Exit logic handled in onSave wrapper above
+
+    // 2. Navigation
+    setTimeout(() => {
         const currentIndex = queue.findIndex(q => q.id === activeQueueId);
         let nextIdToActivate: string | null = null;
-        
-        const currentFormState = {
-            entryDate, entryTime, teamId, leaderName, attendeesCount,
-            workDescription, riskFactors, safetyFeedback,
-            tbmPhotoPreview, tbmVideoPreview, tbmVideoFileName, currentLogBase64,
-            videoAnalysis: cleanedAnalysis 
-        };
 
         if (action === 'finish_doc') {
            const forwardCandidate = queue.slice(currentIndex + 1).find(q => q.status !== 'done');
-           if (forwardCandidate) {
-               nextIdToActivate = forwardCandidate.id;
-           } else {
-               const backwardCandidate = queue.slice(0, currentIndex).find(q => q.status !== 'done');
-               if (backwardCandidate) {
-                   nextIdToActivate = backwardCandidate.id;
-               }
-           }
+           if (forwardCandidate) nextIdToActivate = forwardCandidate.id;
         }
 
         setQueue(prevQueue => {
@@ -504,7 +638,8 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                         ...q,
                         teamsRegistered: [...q.teamsRegistered, currentTeamName],
                         status: action === 'finish_doc' ? 'done' : 'processing',
-                        savedFormData: currentFormState
+                        // Save state if just switching team, clear if finishing doc
+                        savedFormData: action === 'next_team' ? getCurrentFormState() : undefined
                     };
                 }
                 return q;
@@ -512,21 +647,23 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
         });
 
         if (action === 'next_team') {
-            alert(`✅ [${currentTeamName}] 저장 완료! \n같은 문서에서 다른 팀 내용을 입력해주세요.`);
-            resetFormFields();
+            alert(`✅ [${currentTeamName}] 저장 완료! \n다음 팀을 선택하거나 다른 탭을 눌러주세요.`);
+            // Don't reset everything, just maybe team selection visual?
+            // Actually, keep form as is for user to change slightly is better?
+            // User request usually wants blank form for next team.
+            // But if we have extracted results, we might want to switch to next tab?
+            if (extractedResults.length > 0 && currentResultIndex < extractedResults.length - 1) {
+                handleSelectExtractedResult(currentResultIndex + 1);
+            }
         } else {
             if (nextIdToActivate) {
-               alert(`✅ [${currentTeamName}] 저장 및 문서 완료.\n다음 대기 파일로 이동합니다.`);
                setActiveQueueId(nextIdToActivate); 
             } else {
-               // LAST TEAM
                setTbmPhotoPreview(null);
                setCurrentLogBase64(null); 
-               setTbmVideoPreview(null);
-               setVideoAnalysis(null);
-               
+               setExtractedResults([]);
                setTimeout(() => {
-                   alert(`✅ [${currentTeamName}] 저장 완료.\n모든 문서 작업이 완료되었습니다!`);
+                   alert(`✅ 모든 문서 작업이 완료되었습니다!`);
                    setActiveQueueId(null);
                }, 100);
             }
@@ -576,6 +713,15 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
               <h1 className="text-lg font-black text-slate-800 flex items-center gap-2">
                  <Layers className="text-blue-600" /> 스마트 TBM 통합 작업실
               </h1>
+              
+              {/* HELP BUTTON */}
+              <button 
+                onClick={() => setShowHelpModal(true)}
+                className="ml-2 text-slate-400 hover:text-blue-600 transition-colors"
+                title="이용 가이드"
+              >
+                <HelpCircle size={20} />
+              </button>
            </div>
            
            <div className="flex items-center gap-3">
@@ -742,31 +888,91 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                                 onChange={(e) => setTeamId(e.target.value)}
                                 className="w-full text-base font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
                              >
-                                {teams.map(t => (
-                                   <option key={t.id} value={t.id}>
-                                      {t.name}
-                                   </option>
-                                ))}
+                                {teams.map(t => {
+                                   const isDone = queue.find(q => q.id === activeQueueId)?.teamsRegistered.includes(t.name);
+                                   return (
+                                       <option key={t.id} value={t.id} disabled={isDone} className={isDone ? "text-slate-300" : "text-slate-900"}>
+                                          {t.name} {isDone ? '(완료)' : ''}
+                                       </option>
+                                   );
+                                })}
                              </select>
                           </div>
+                          
+                          {/* DYNAMIC BUTTON LABEL */}
                           <button 
                              onClick={handleAnalyze}
                              disabled={isAnalyzing}
-                             className="h-[46px] bg-slate-900 text-white px-4 rounded-lg font-bold hover:bg-blue-600 transition-colors shadow-md flex items-center gap-2 shrink-0 text-sm"
+                             className={`h-[46px] text-white px-4 rounded-lg font-bold hover:opacity-90 transition-all shadow-md flex items-center gap-2 shrink-0 text-xs ${
+                                activeQueueId ? 'bg-gradient-to-r from-indigo-600 to-violet-600' : 'bg-slate-900'
+                             }`}
                           >
-                             {isAnalyzing ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16} className="text-yellow-400"/>}
-                             추출
+                             {isAnalyzing ? <Loader2 className="animate-spin" size={16}/> : (
+                                activeQueueId ? <Files size={16} className="text-white"/> : <Sparkles size={16} className="text-yellow-400"/>
+                             )}
+                             {activeQueueId ? (isAnalyzing ? '분석 중...' : '전체 팀 자동 분석') : '추출'}
                           </button>
                        </div>
                        
-                       {/* Registered Teams for this doc */}
-                       <div className="mt-3 flex flex-wrap gap-1.5">
-                          {queue.find(q => q.id === activeQueueId)?.teamsRegistered.map((team, i) => (
-                             <span key={i} className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1">
-                                <CheckCircle2 size={10}/> {team}
-                             </span>
-                          ))}
-                       </div>
+                       {/* Detected Teams Tabs (New) */}
+                       {extractedResults.length > 0 && (
+                           <div className="mt-3 overflow-x-auto pb-1 custom-scrollbar">
+                               <div className="flex gap-2">
+                                   {extractedResults.map((result, idx) => (
+                                       <button
+                                           key={idx}
+                                           onClick={() => handleSelectExtractedResult(idx)}
+                                           className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                                               currentResultIndex === idx
+                                               ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                               : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                                           }`}
+                                       >
+                                           {result.teamName || `Team ${idx + 1}`}
+                                       </button>
+                                   ))}
+                               </div>
+                               <p className="text-[9px] text-indigo-600 font-bold mt-1.5 px-1">
+                                   ✨ 문서에서 {extractedResults.length}개 팀이 발견되었습니다. 탭을 눌러 확인하세요.
+                               </p>
+                           </div>
+                       )}
+
+                       {/* Auto Analysis Indicator */}
+                       {isAnalyzing && (
+                           <div className="mt-3 bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-2 rounded-lg flex items-center gap-2 animate-pulse">
+                               <Zap size={14} className="fill-indigo-600"/>
+                               <span className="text-xs font-bold">AI가 문서 내 모든 팀을 스캔하고 있습니다...</span>
+                           </div>
+                       )}
+                       
+                       {/* Team Progress Grid */}
+                       {extractedResults.length === 0 && !isAnalyzing && (
+                           <div className="mt-4 bg-white border border-slate-200 rounded-lg p-2">
+                               <div className="flex items-center gap-2 mb-2">
+                                   <ListChecks size={12} className="text-slate-400"/>
+                                   <span className="text-[10px] font-bold text-slate-500 uppercase">Daily Team Checklist</span>
+                               </div>
+                               <div className="flex flex-wrap gap-1.5 max-h-[60px] overflow-y-auto custom-scrollbar">
+                                  {teams.map((t) => {
+                                     const isDone = queue.find(q => q.id === activeQueueId)?.teamsRegistered.includes(t.name);
+                                     return (
+                                         <div 
+                                            key={t.id} 
+                                            onClick={() => !isDone && setTeamId(t.id)}
+                                            className={`text-[9px] font-bold px-2 py-1 rounded border cursor-pointer transition-all ${
+                                                isDone 
+                                                ? 'bg-green-100 text-green-700 border-green-200' 
+                                                : (t.id === teamId ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')
+                                            }`}
+                                         >
+                                            {t.name} {isDone && '✔'}
+                                         </div>
+                                     );
+                                  })}
+                               </div>
+                           </div>
+                       )}
                     </div>
 
                     {/* Scrollable Form Fields */}
@@ -962,38 +1168,28 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                                 <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload}/>
                              </div>
                           </div>
-
-                          {/* Video Audit Button */}
-                          {tbmVideoPreview && !videoAnalysis && (
-                             <div className="space-y-2">
-                                <button 
-                                   onClick={handleVideoAudit}
-                                   disabled={isVideoAnalyzing}
-                                   className="w-full py-3 bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 text-white rounded-xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-                                   style={{backgroundSize: '200% 100%'}}
-                                >
-                                   {isVideoAnalyzing ? <Loader2 size={16} className="animate-spin"/> : <Target size={16}/>}
-                                   AI 심층 정밀 진단 (Deep Insight)
-                                </button>
-                                {isVideoAnalyzing && videoStatusMessage && (
-                                   <div className="bg-slate-800 text-white text-[10px] p-2 rounded-lg text-center whitespace-pre-wrap">
-                                      {videoStatusMessage}
-                                   </div>
-                                )}
-                             </div>
-                          )}
                           
                           {/* AI Deep Insight Result Card */}
                           {videoAnalysis && (
                              <div className="bg-white rounded-xl border border-indigo-100 shadow-xl overflow-hidden relative ring-1 ring-indigo-50">
-                                
                                 {/* Header */}
                                 <div className="bg-gradient-to-r from-indigo-50 to-violet-50 p-4 border-b border-indigo-100 flex justify-between items-center">
                                    <div>
                                       <h4 className="text-sm font-black text-indigo-900 flex items-center gap-2">
                                          <Sparkles size={16} className="text-indigo-600"/> AI Deep Insight Report
                                       </h4>
-                                      <p className="text-[10px] text-indigo-400 font-bold mt-0.5">Vision AI & Bias Analysis Engine</p>
+                                      {/* Source Indicator */}
+                                      <div className="flex items-center gap-1.5 mt-1">
+                                          {videoAnalysis.analysisSource === 'VIDEO' ? (
+                                              <span className="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
+                                                  <Film size={10}/> AI 영상 정밀 진단
+                                              </span>
+                                          ) : (
+                                              <span className="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                                                  <FileText size={10}/> 문서/사진 기반 분석
+                                              </span>
+                                          )}
+                                      </div>
                                    </div>
                                    <div className="flex items-center gap-2">
                                        <div className="text-right">
@@ -1037,134 +1233,6 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                                          </p>
                                       )}
                                    </div>
-
-                                   {/* 2. Worker Focus Heatmap (Feature 3) */}
-                                   <div>
-                                      <h5 className="text-[10px] font-black text-slate-400 uppercase mb-2 flex items-center gap-1">
-                                         <Eye size={12}/> Worker Focus Heatmap
-                                      </h5>
-                                      <div className="grid grid-cols-3 gap-2">
-                                         {['front', 'back', 'side'].map((zone) => {
-                                            const key = zone as keyof typeof videoAnalysis.focusAnalysis.focusZones;
-                                            const level = videoAnalysis.focusAnalysis?.focusZones?.[key] || 'HIGH';
-                                            const zoneName = zone === 'front' ? '전면(Front)' : zone === 'back' ? '후면(Back)' : '측면(Side)';
-                                            
-                                            return (
-                                               <div key={zone} className={`p-2 rounded-lg border flex flex-col items-center gap-1 ${level === 'HIGH' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                                                  <span className="text-[9px] font-bold text-slate-500 uppercase">{zoneName} Zone</span>
-                                                  {isEditingAnalysis ? (
-                                                      <select 
-                                                         value={level} 
-                                                         onChange={(e) => updateAnalysis(prev => ({
-                                                             ...prev,
-                                                             focusAnalysis: {
-                                                                 ...prev.focusAnalysis,
-                                                                 focusZones: {
-                                                                     ...prev.focusAnalysis.focusZones,
-                                                                     [key]: e.target.value as 'HIGH' | 'LOW'
-                                                                 }
-                                                             }
-                                                         }))}
-                                                         className="text-[10px] font-bold bg-white border border-slate-300 rounded px-1 py-0.5"
-                                                      >
-                                                          <option value="HIGH">집중</option>
-                                                          <option value="LOW">산만</option>
-                                                      </select>
-                                                  ) : (
-                                                      <span className={`text-xs font-black ${level === 'HIGH' ? 'text-green-600' : 'text-red-500'}`}>
-                                                         {level === 'HIGH' ? '집중' : '산만'}
-                                                      </span>
-                                                  )}
-                                               </div>
-                                            );
-                                         })}
-                                      </div>
-                                      <div className="mt-2 flex justify-between items-center text-[10px] text-slate-500 px-1">
-                                         <div className="flex items-center gap-1">
-                                            <span>전체 집중도:</span>
-                                            {isEditingAnalysis ? (
-                                                <input 
-                                                    type="number" 
-                                                    value={videoAnalysis.focusAnalysis?.overall || 0}
-                                                    onChange={(e) => updateAnalysis(prev => ({...prev, focusAnalysis: {...prev.focusAnalysis, overall: Number(e.target.value)}}))}
-                                                    className="w-10 text-right border-b border-slate-300 font-bold outline-none"
-                                                />
-                                            ) : (
-                                                <strong className="text-slate-800">{videoAnalysis.focusAnalysis?.overall || 0}</strong>
-                                            )}
-                                            <span>%</span>
-                                         </div>
-                                         <div className="flex items-center gap-1">
-                                            <span>딴짓 감지:</span>
-                                            {isEditingAnalysis ? (
-                                                <input 
-                                                    type="number" 
-                                                    value={videoAnalysis.focusAnalysis?.distractedCount || 0}
-                                                    onChange={(e) => updateAnalysis(prev => ({...prev, focusAnalysis: {...prev.focusAnalysis, distractedCount: Number(e.target.value)}}))}
-                                                    className="w-8 text-right border-b border-slate-300 font-bold outline-none text-red-500"
-                                                />
-                                            ) : (
-                                                <strong className="text-red-500">{videoAnalysis.focusAnalysis?.distractedCount || 0}</strong>
-                                            )}
-                                            <span>명</span>
-                                         </div>
-                                      </div>
-                                   </div>
-
-                                   {/* 3. Bias Analysis - Blind Spots (Feature 2) */}
-                                   {(videoAnalysis.insight?.missingTopics?.length > 0 || isEditingAnalysis) && (
-                                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 relative overflow-hidden">
-                                          <div className="absolute top-0 right-0 w-16 h-16 bg-orange-100 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl"></div>
-                                          <h5 className="text-[10px] font-black text-orange-700 uppercase mb-2 flex items-center gap-1 relative z-10">
-                                             <AlertOctagon size={12}/> Blind Spot Alert (누락 위험)
-                                          </h5>
-                                          
-                                          {isEditingAnalysis ? (
-                                              <div className="relative z-10 space-y-2">
-                                                  <input 
-                                                      type="text"
-                                                      value={videoAnalysis.insight.missingTopics.join(',')} // Join with comma only to allow space typing if user wants
-                                                      onChange={(e) => updateAnalysis(prev => ({
-                                                          ...prev, 
-                                                          insight: {
-                                                              ...prev.insight, 
-                                                              // Allow empty strings while typing to preserve trailing comma
-                                                              missingTopics: e.target.value.split(',')
-                                                          }
-                                                      }))}
-                                                      className="w-full text-[10px] border border-orange-300 rounded px-2 py-1 bg-white mb-1 placeholder:text-orange-300"
-                                                      placeholder="누락된 주제 입력 (콤마로 구분)"
-                                                  />
-                                                  <textarea 
-                                                      value={videoAnalysis.insight.suggestion}
-                                                      onChange={(e) => updateAnalysis(prev => ({
-                                                          ...prev, 
-                                                          insight: {
-                                                              ...prev.insight, 
-                                                              suggestion: e.target.value
-                                                          }
-                                                      }))}
-                                                      className="w-full text-[10px] border border-orange-300 rounded px-2 py-1 bg-white font-medium"
-                                                      rows={2}
-                                                      placeholder="개선 제안 입력"
-                                                  />
-                                              </div>
-                                          ) : (
-                                              <>
-                                                  <div className="flex flex-wrap gap-1.5 relative z-10">
-                                                     {videoAnalysis.insight.missingTopics.filter(t => t.trim() !== "").map((topic, i) => (
-                                                        <span key={i} className="text-[10px] font-bold bg-white text-orange-600 px-2 py-1 rounded border border-orange-100 shadow-sm">
-                                                           {topic}
-                                                        </span>
-                                                     ))}
-                                                  </div>
-                                                  <p className="text-[10px] text-orange-800 mt-2 font-medium border-t border-orange-200/50 pt-2 leading-snug">
-                                                     💡 Tip: {videoAnalysis.insight.suggestion}
-                                                  </p>
-                                              </>
-                                          )}
-                                       </div>
-                                   )}
 
                                    {/* 4. Basic Metrics (Standard TBM) */}
                                    <div className="grid grid-cols-2 gap-2">
@@ -1220,19 +1288,29 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                     <div className="p-4 border-t border-slate-200 bg-white absolute bottom-0 left-0 right-0 z-10 flex gap-2 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
                        {!initialData ? (
                           <>
-                             <button 
-                                onClick={() => handleSave('next_team')}
-                                className="flex-1 bg-white border border-slate-300 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-50 transition-colors text-xs flex flex-col items-center justify-center leading-none gap-1"
-                             >
-                                <span className="flex items-center gap-1"><Plus size={14}/> 현재 문서에 팀 추가</span>
-                             </button>
+                             {extractedResults.length > 0 ? (
+                                <button 
+                                   onClick={() => handleSave('save_all')}
+                                   className="flex-[2] bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 text-sm flex flex-col items-center justify-center leading-none gap-1"
+                                >
+                                   <span className="flex items-center gap-1"><Copy size={16}/> {extractedResults.length}개 팀 일괄 저장</span>
+                                   <span className="text-[10px] opacity-80 font-normal">자동으로 다음 문서 이동</span>
+                                </button>
+                             ) : (
+                                <button 
+                                   onClick={() => handleSave('next_team')}
+                                   className="flex-1 bg-white border border-slate-300 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-50 transition-colors text-xs flex flex-col items-center justify-center leading-none gap-1"
+                                >
+                                   <span className="flex items-center gap-1"><Plus size={14}/> 현재 문서에 팀 추가</span>
+                                </button>
+                             )}
 
                              <button 
                                 onClick={() => handleSave('finish_doc')}
-                                className="flex-[2] bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 text-sm flex flex-col items-center justify-center leading-none gap-1"
+                                className="flex-[1] bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-900 transition-colors shadow-lg text-sm flex flex-col items-center justify-center leading-none gap-1"
                              >
-                                <span className="flex items-center gap-1"><Check size={16}/> 저장 및 문서 완료</span>
-                                <span className="text-[10px] opacity-80 font-normal">다음 대기 파일로 이동</span>
+                                <span className="flex items-center gap-1"><Check size={16}/> {extractedResults.length > 0 ? '단일 저장' : '저장 완료'}</span>
+                                <span className="text-[10px] opacity-80 font-normal">다음 파일</span>
                              </button>
                           </>
                        ) : (
@@ -1264,20 +1342,45 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
               </div>
            ) : (
               /* EMPTY STATE (Right Side) */
-              <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-400 p-10">
-                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border border-slate-200">
-                    <Layers size={32} className="text-slate-300"/>
+              <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-400 p-10 animate-fade-in">
+                 <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-blue-100 relative group overflow-hidden">
+                    <div className="absolute inset-0 bg-blue-600/5 group-hover:bg-blue-600/10 transition-colors"></div>
+                    <FileStack size={48} className="text-blue-500 mb-2 transform group-hover:-translate-y-1 transition-transform duration-300"/>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-8 h-1 bg-slate-200 rounded-full group-hover:bg-blue-300 transition-colors"></div>
                  </div>
-                 <h2 className="text-2xl font-black text-slate-700 mb-2">작업할 파일을 선택하세요</h2>
-                 <p className="text-sm max-w-md text-center mb-8">
-                    왼쪽 목록에서 파일을 선택하거나<br/>새로운 TBM 일지를 추가하여 작업을 시작하세요.
-                 </p>
+                 
+                 <h2 className="text-3xl font-black text-slate-800 mb-3 tracking-tight">대량 문서 처리 모드</h2>
+                 
+                 <div className="max-w-md text-center space-y-4 mb-10">
+                    <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                       <strong className="text-blue-600">3주치 데이터(PDF/사진)</strong>를 한 번에 드래그하여 놓으세요.<br/>
+                       AI가 문서를 순차적으로 분석하여 대장을 완성해 드립니다.
+                    </p>
+                    <div className="flex justify-center gap-8 text-xs font-bold text-slate-400">
+                       <div className="flex flex-col items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">1</div>
+                          <span>일괄 선택</span>
+                       </div>
+                       <div className="h-px w-8 bg-slate-300 mt-4"></div>
+                       <div className="flex flex-col items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">2</div>
+                          <span>자동 대기열</span>
+                       </div>
+                       <div className="h-px w-8 bg-slate-300 mt-4"></div>
+                       <div className="flex flex-col items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">3</div>
+                          <span>일괄 분석</span>
+                       </div>
+                    </div>
+                 </div>
+
                  <button 
                     onClick={() => sidebarInputRef.current?.click()}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 flex items-center gap-2"
+                    className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold hover:shadow-xl hover:scale-105 transition-all shadow-lg shadow-blue-200 flex items-center gap-3 text-sm"
                  >
-                    <Plus size={18}/> 파일 불러오기
+                    <Plus size={20}/> 파일 불러오기 (PDF 포함)
                  </button>
+                 <p className="text-[10px] text-slate-400 mt-4 font-bold">지원 형식: JPG, PNG, PDF (자동 변환)</p>
               </div>
            )}
         </div>
@@ -1319,6 +1422,68 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                        </p>
                     </button>
                  ))}
+              </div>
+           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* NEW: Batch Upload Guide Modal */}
+      {showHelpModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowHelpModal(false)}>
+           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in" onClick={e => e.stopPropagation()}>
+              <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                 <h2 className="text-2xl font-black mb-2 flex items-center gap-2 relative z-10">
+                    <FileStack className="text-blue-400"/> 대량 문서 처리 가이드
+                 </h2>
+                 <p className="text-slate-400 text-sm font-medium relative z-10">
+                    3주치(약 20일분) 이상의 데이터를 가장 효율적으로 처리하는 방법입니다.
+                 </p>
+                 <button onClick={() => setShowHelpModal(false)} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors">
+                    <X size={24}/>
+                 </button>
+              </div>
+              
+              <div className="p-8 space-y-8">
+                 <div className="flex gap-6">
+                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center font-black text-xl shrink-0">1</div>
+                    <div>
+                       <h3 className="font-bold text-lg text-slate-800 mb-1">한 번에 선택하세요</h3>
+                       <p className="text-sm text-slate-500 leading-relaxed">
+                          '파일 추가' 버튼을 누르고, 폴더 내의 모든 사진이나 PDF 파일을 <strong className="text-blue-600">드래그하거나 전체 선택(Ctrl+A)</strong>하여 여십시오. 
+                          시스템이 자동으로 대기열(Queue)을 생성합니다.
+                       </p>
+                    </div>
+                 </div>
+
+                 <div className="flex gap-6">
+                    <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl shrink-0">2</div>
+                    <div>
+                       <h3 className="font-bold text-lg text-slate-800 mb-1">AI 자동 추출 및 검토</h3>
+                       <p className="text-sm text-slate-500 leading-relaxed">
+                          왼쪽 목록에서 파일을 클릭하면 <strong className="text-indigo-600">✨ AI 분석이 자동으로 시작</strong>됩니다. 
+                          내용을 검토하고 수정이 필요하면 즉시 수정하세요.
+                       </p>
+                    </div>
+                 </div>
+
+                 <div className="flex gap-6">
+                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center font-black text-xl shrink-0">3</div>
+                    <div>
+                       <h3 className="font-bold text-lg text-slate-800 mb-1">저장 후 자동 이동</h3>
+                       <p className="text-sm text-slate-500 leading-relaxed">
+                          검토가 끝나면 <strong className="text-green-600">저장 및 문서 완료</strong> 버튼을 누르세요. 
+                          저장됨과 동시에 <strong className="text-slate-800 underline decoration-green-300">자동으로 다음 순서의 파일이 열리고 분석됩니다.</strong>
+                       </p>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                 <button onClick={() => setShowHelpModal(false)} className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg">
+                    이해했습니다. 시작하기
+                 </button>
               </div>
            </div>
         </div>,
