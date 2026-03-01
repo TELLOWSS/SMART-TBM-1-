@@ -359,7 +359,7 @@ const ImpactReportModal: React.FC<ImpactReportModalProps> = ({ entries, onClose 
             {/* Footer */}
             <div className="p-6 border-t border-slate-100 bg-white flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
-                    <img src="https://via.placeholder.com/32" className="w-8 h-8 rounded-full bg-slate-200" alt="Logo"/>
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold text-[10px]" aria-label="휘강건설 로고">휘</div>
                     <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">System Generated</p>
                         <p className="text-xs font-bold text-slate-800">(주)휘강건설 안전관리팀</p>

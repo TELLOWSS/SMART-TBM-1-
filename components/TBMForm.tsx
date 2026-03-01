@@ -528,7 +528,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
       };
 
       return {
-          id: `ENTRY-${Date.now()}-${uniqueIndex}-${Math.random().toString(36).substring(2, 7)}`, // [FIX]: Ensure uniqueness
+          id: initialData ? String(initialData.id) : `ENTRY-${Date.now()}-${uniqueIndex}-${Math.random().toString(36).substring(2, 7)}`,
           date: entryDate,
           time: entryTime,
           teamId: finalTeamId,
@@ -732,7 +732,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                  <span>{queue.length} 파일</span>
               </div>
               <button 
-                 onClick={() => onSave({} as any, true)} // Just exit
+                 onClick={onCancel}
                  className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-700"
               >
                  작업 종료
@@ -998,7 +998,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                           <div>
                              <label className="text-[11px] font-bold text-slate-500 mb-1 block">참석 인원</label>
                              <div className="relative">
-                                <input type="number" value={attendeesCount} onChange={(e)=>setAttendeesCount(Number(e.target.value))} className="w-full border border-slate-300 rounded-lg p-2 text-sm font-bold"/>
+                                <input type="number" value={attendeesCount} onChange={(e)=>setAttendeesCount(parseInt(e.target.value) || 0)} className="w-full border border-slate-300 rounded-lg p-2 text-sm font-bold"/>
                                 <span className="absolute right-3 top-2 text-xs text-slate-400 font-bold">명</span>
                              </div>
                           </div>

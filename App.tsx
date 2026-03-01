@@ -343,7 +343,7 @@ function App() {
               {currentView === 'reports' && 'Safe Work Report Center'}
             </h1>
             <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">
-               (주)휘강건설 스마트 안전관리 시스템 v2.5
+               (주)휘강건설 스마트 안전관리 시스템 v2.7.3
             </p>
           </div>
         </header>
