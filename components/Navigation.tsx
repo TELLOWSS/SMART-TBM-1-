@@ -203,7 +203,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentV
 
                 <div className="flex items-center justify-between px-2">
                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-500">v2.5.5 Stable</span>
+                      <span className="text-[10px] font-mono text-slate-500">v2.7.3 Stable</span>
                    </div>
                    <button 
                      onClick={onOpenSettings}
