@@ -1,72 +1,157 @@
 
 /**
  * 동영상 압축 및 오디오 캡처 유틸리티 (Audio + Video)
- * 
- * [v2.6.5 개선사항 - Audio Fix]
- * 1. 기존 'muted=true' 방식은 오디오 데이터까지 0으로 만들어 AI가 음성을 인식하지 못함.
- * 2. 해결책: 'muted=false'로 설정하되, Web Audio API를 사용해 스피커(Destination) 연결을 끊고
- *    MediaRecorder(StreamDestination)로만 오디오를 라우팅함.
- *    => 사용자: 조용함 (Silent), 녹음기: 소리 들림 (Active Audio).
+ *
+ * 파일 크기에 따라 자동으로 압축 프로파일을 선택합니다.
+ * - 대용량: 더 높은 배속/낮은 해상도로 빠른 코칭 우선
+ * - 중소용량: 품질-속도 균형
  */
 
-export const compressVideo = (file: File): Promise<Blob> => {
+export interface VideoCompressionProfile {
+  label: 'FAST' | 'BALANCED' | 'ULTRA_FAST';
+  playbackRate: number;
+  targetHeight: number;
+  videoBitsPerSecond: number;
+  fps: number;
+  maxOutputDurationMs: number;
+}
+
+export interface VideoCompressionResult {
+  blob: Blob;
+  mimeType: string;
+  profile: VideoCompressionProfile;
+  originalSizeMB: number;
+  compressedSizeKB: number;
+  sourceDurationSec: number;
+  analyzedDurationSec: number;
+  audioIncluded: boolean;
+}
+
+const MAX_ANALYZABLE_DURATION_SEC = 120;
+const MAX_ANALYSIS_PLAYBACK_RATE = 4;
+
+const pickCompressionProfile = (fileSizeMB: number): VideoCompressionProfile => {
+  if (fileSizeMB >= 200) {
+    return {
+      label: 'ULTRA_FAST',
+      playbackRate: 3.0,
+      targetHeight: 144,
+      videoBitsPerSecond: 100000,
+      fps: 8,
+      maxOutputDurationMs: 30000,
+    };
+  }
+
+  if (fileSizeMB >= 50) {
+    return {
+      label: 'FAST',
+      playbackRate: 2.5,
+      targetHeight: 180,
+      videoBitsPerSecond: 140000,
+      fps: 10,
+      maxOutputDurationMs: 30000,
+    };
+  }
+
+  return {
+    label: 'BALANCED',
+    playbackRate: 2.0,
+    targetHeight: 240,
+    videoBitsPerSecond: 220000,
+    fps: 12,
+    maxOutputDurationMs: 30000,
+  };
+};
+
+export const compressVideo = (file: File): Promise<VideoCompressionResult> => {
   return new Promise((resolve, reject) => {
+    const originalSizeMB = file.size / 1024 / 1024;
+    const profile = pickCompressionProfile(originalSizeMB);
+
+    // [FIX] Use document.createElement('video') instead of new Audio() or similar potentially risky constructors
     const video = document.createElement('video');
     const url = URL.createObjectURL(file);
     
-    // 1. 기본 설정
     video.src = url;
     video.crossOrigin = "anonymous";
     video.playsInline = true;
-    video.setAttribute('webkit-playsinline', 'true');
-    video.preload = "auto";
+    video.muted = false; // Capture audio
+    video.volume = 1.0;
     
-    // [CRITICAL CHANGE]
-    // AI 음성 인식을 위해 muted는 절대 false여야 함.
-    // 대신 소리가 밖으로 새나가지 않게 AudioContext로 라우팅을 제어함.
-    video.muted = false; 
-    video.volume = 1.0; 
+    // 파일 크기 기반 배속 적용
+    video.defaultPlaybackRate = profile.playbackRate;
+    video.playbackRate = profile.playbackRate;
+    
+    if ('preservesPitch' in video) {
+        (video as any).preservesPitch = true;
+    }
     
     let stream: MediaStream | null = null;
     let mediaRecorder: MediaRecorder | null = null;
-    let animationId: number;
     let audioCtx: AudioContext | null = null;
     let source: MediaElementAudioSourceNode | null = null;
     let dest: MediaStreamAudioDestinationNode | null = null;
+    let animationId: number;
 
     const cleanup = () => {
       if (animationId) cancelAnimationFrame(animationId);
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-      
-      // Clean up Audio Context
       if (source) try { source.disconnect(); } catch(e) {}
       if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
-      
+      // [FIX] Stop all media stream tracks to release camera/mic resources
+      if (stream) {
+          try { stream.getTracks().forEach((t) => t.stop()); } catch(e) {}
+          stream = null;
+      }
       video.pause();
       video.removeAttribute('src');
       video.remove();
       URL.revokeObjectURL(url);
     };
 
+    // 전체 구간 압축은 최대 약 30초가 걸릴 수 있다.
     const timeoutId = setTimeout(() => {
         cleanup();
-        reject(new Error("Video processing timeout (30s limit)"));
-    }, 30000);
+        reject(new Error("Video processing timeout."));
+    }, 50000);
 
-    video.oncanplay = () => {
+    video.oncanplay = async () => {
       if (stream) return;
 
-      // 1. Resolution Resize (360p)
-      const TARGET_HEIGHT = 360;
+      const sourceDurationSec = Number(video.duration);
+      if (!Number.isFinite(sourceDurationSec) || sourceDurationSec <= 0) {
+        cleanup();
+        reject(new Error("영상 길이를 확인할 수 없습니다."));
+        return;
+      }
+      if (sourceDurationSec > MAX_ANALYZABLE_DURATION_SEC) {
+        cleanup();
+        reject(new Error(`영상이 너무 깁니다. ${MAX_ANALYZABLE_DURATION_SEC}초 이하로 잘라서 다시 업로드해주세요.`));
+        return;
+      }
+
+      const targetOutputDurationSec = 30;
+      const requiredPlaybackRate = sourceDurationSec / targetOutputDurationSec;
+      const actualPlaybackRate = Math.min(
+        MAX_ANALYSIS_PLAYBACK_RATE,
+        Math.max(profile.playbackRate, requiredPlaybackRate)
+      );
+      const effectiveProfile: VideoCompressionProfile = {
+        ...profile,
+        playbackRate: actualPlaybackRate,
+        maxOutputDurationMs: Math.ceil((sourceDurationSec / actualPlaybackRate + 1) * 1000),
+      };
+
+      // 1. Dynamic Downscaling
+      const TARGET_HEIGHT = profile.targetHeight;
       let width = video.videoWidth;
       let height = video.videoHeight;
-      
-      if (width === 0 || height === 0) { width = 640; height = 360; }
       
       if (height > TARGET_HEIGHT) {
         width = Math.round(width * (TARGET_HEIGHT / height));
         height = TARGET_HEIGHT;
       }
+      // Ensure even dimensions for codecs
       if (width % 2 !== 0) width--;
       if (height % 2 !== 0) height--;
 
@@ -77,52 +162,67 @@ export const compressVideo = (file: File): Promise<Blob> => {
 
       if (!ctx) {
         cleanup();
-        reject(new Error("Canvas context initialization failed"));
+        reject(new Error("Canvas init failed"));
         return;
       }
 
-      // 2. [Advanced Audio Routing] - The "Silent Recording" Trick
+      // 2. Audio Capture
       let audioTracks: MediaStreamTrack[] = [];
+      let audioIncluded = false;
       try {
-         // Create Audio Context
          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-         audioCtx = new AudioContextClass();
-         
-         // Create Source from Video Element
-         source = audioCtx.createMediaElementSource(video);
-         
-         // Create Destination (Stream) - This effectively captures the audio
-         dest = audioCtx.createMediaStreamDestination();
-         
-         // Connect Source -> Stream Destination
-         source.connect(dest);
-         
-         // IMPORTANT: We do NOT connect 'source' to 'audioCtx.destination' (Speakers).
-         // This isolates the audio path to the recorder only. No sound will come out of speakers.
-         
-         audioTracks = dest.stream.getAudioTracks();
+         if (AudioContextClass) {
+             try {
+                 // [DEFENSIVE] Illegal Constructor protection for AudioContext
+                 audioCtx = new AudioContextClass();
+                 source = audioCtx.createMediaElementSource(video);
+                 dest = audioCtx.createMediaStreamDestination();
+                 source.connect(dest);
+                 audioTracks = dest.stream.getAudioTracks();
+                 audioIncluded = audioTracks.length > 0;
+             } catch (e) {
+                 console.warn("AudioContext init failed (Illegal Constructor likely):", e);
+                 audioCtx = null;
+                 audioTracks = []; // Ensure empty array on failure
+             }
+         }
       } catch (e) {
-         console.warn("Web Audio API setup failed, falling back to silent video:", e);
+         console.warn("Audio capture failed, silent video:", e);
       }
 
-      // 3. Combine Streams
-      const canvasStream = canvas.captureStream(30); 
-      const tracks = [...canvasStream.getVideoTracks(), ...audioTracks];
-      stream = new MediaStream(tracks);
+      // 3. Low FPS Stream
+      const canvasStream = canvas.captureStream(profile.fps);
+      // Default to video-only first to ensure we have something
+      stream = canvasStream;
 
-      // 4. Recorder Setup
+      // Try to mix audio if available
+      // [CRITICAL FIX] Avoid `new MediaStream([...])` constructor which throws Illegal Constructor in some envs.
+      // Instead, use `addTrack` on the existing valid stream instance.
+      if (audioTracks.length > 0) {
+          try {
+              audioTracks.forEach(track => {
+                  stream?.addTrack(track);
+              });
+          } catch (e) {
+              console.warn("Audio mixing failed (addTrack error), proceeding with video only.", e);
+          }
+      }
+
+      // 4. Recorder
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' 
                      : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm'
                      : 'video/mp4';
 
       try {
+        if (!stream) throw new Error("Stream is null");
         mediaRecorder = new MediaRecorder(stream, {
           mimeType,
-          videoBitsPerSecond: 600000, // 600kbps for better audio/video balance
+          videoBitsPerSecond: profile.videoBitsPerSecond,
         });
       } catch (e) {
         cleanup();
-        reject(new Error(`MediaRecorder init failed`));
+        console.error("MediaRecorder init failed:", e);
+        reject(new Error(`MediaRecorder failed: ${(e as any).message}`));
         return;
       }
 
@@ -135,8 +235,18 @@ export const compressVideo = (file: File): Promise<Blob> => {
         clearTimeout(timeoutId);
         try {
             const blob = new Blob(chunks, { type: mimeType });
-            console.log(`✅ Video Processed: ${(blob.size / 1024).toFixed(1)} KB`);
-            resolve(blob);
+            const compressedSizeKB = blob.size / 1024;
+            console.log(`🚀 Video Compressed [${profile.label}] ${originalSizeMB.toFixed(1)}MB -> ${compressedSizeKB.toFixed(1)}KB`);
+            resolve({
+              blob,
+              mimeType,
+              profile: effectiveProfile,
+              originalSizeMB,
+              compressedSizeKB,
+              sourceDurationSec,
+              analyzedDurationSec: sourceDurationSec,
+              audioIncluded,
+            });
         } catch (e) {
             reject(e);
         } finally {
@@ -144,14 +254,14 @@ export const compressVideo = (file: File): Promise<Blob> => {
         }
       };
 
-      // 5. Start Recording Loop
-      const DURATION_MS = 10000;
+      // 5. Recording Strategy
+      const MAX_OUTPUT_DURATION_MS = effectiveProfile.maxOutputDurationMs;
       let startTime = Date.now();
 
       const draw = () => {
         if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
         
-        if (Date.now() - startTime > DURATION_MS) {
+        if (Date.now() - startTime > MAX_OUTPUT_DURATION_MS || video.ended) {
             if (mediaRecorder.state === 'recording') mediaRecorder.stop();
             return;
         }
@@ -160,26 +270,33 @@ export const compressVideo = (file: File): Promise<Blob> => {
         animationId = requestAnimationFrame(draw);
       };
 
-      // 6. Play & Record
-      // We must catch play() errors because unmuted autoplay is often blocked by browsers
-      // if there was no user interaction. However, in this app, compressVideo() is triggered by
-      // a file input change (user interaction), so it usually works.
-      video.play().then(() => {
+      const startRecording = () => {
           if (mediaRecorder && mediaRecorder.state === 'inactive') {
               mediaRecorder.start();
+            video.playbackRate = effectiveProfile.playbackRate;
               startTime = Date.now();
               draw();
           }
-      }).catch(e => {
-          console.error("Playback failed (Autoplay Policy?):", e);
-          cleanup();
-          reject(new Error("Browser blocked video playback. Please try again."));
-      });
+      };
+
+      try {
+          await video.play();
+          startRecording();
+      } catch (e) {
+          try {
+              video.muted = true; 
+              await video.play();
+              startRecording();
+          } catch (err) {
+              cleanup();
+              reject(new Error("Playback failed."));
+          }
+      }
     };
 
     video.onerror = () => {
         cleanup();
-        reject(new Error("Video format error."));
+        reject(new Error("Video corrupt."));
     };
   });
 };

@@ -1,52 +1,60 @@
 
 import React from 'react';
-import { LayoutDashboard, PlusCircle, FileText, ShieldCheck, ChevronRight, Settings, Shield, Award, Sparkles, History } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, FileText, ShieldCheck, ChevronRight, Settings, Shield, Sparkles, History, Hexagon, User, Microscope } from 'lucide-react';
 
 interface NavigationProps {
   currentView: string;
   setCurrentView: (view: string) => void;
+  managerName: string;
   onOpenSettings: () => void;
-  onShowHistory: () => void; // New Prop
+  onShowHistory: () => void; 
+  onShowIdentity: () => void;
+  onNewEntryClick: () => void; // [NEW] Callback for handling "New" button click separately
 }
 
-// Updated Logo: HUIGANG Construction Premium Brand
+// Updated Logo: Geometric Monogram (Architectural)
 const BrandLogo = () => (
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="brand_grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#ffffff" />
-        <stop offset="1" stopColor="#94a3b8" />
-      </linearGradient>
-    </defs>
-    {/* Abstract Building / H Shape */}
-    <path d="M10 8H18V20H30V8H38V40H30V28H18V40H10V8Z" fill="url(#brand_grad)" />
-    {/* Safety Dot */}
-    <circle cx="38" cy="10" r="3" fill="#EF4444" stroke="#0F172A" strokeWidth="2"/>
-  </svg>
+  <div className="relative w-10 h-10 flex items-center justify-center group">
+     <div className="absolute inset-0 bg-blue-600 rounded-xl rotate-3 opacity-20 group-hover:rotate-6 transition-transform duration-500"></div>
+     <div className="absolute inset-0 bg-indigo-600 rounded-xl -rotate-3 opacity-20 group-hover:-rotate-6 transition-transform duration-500"></div>
+    <div className="relative w-full h-full bg-gradient-to-br from-white to-slate-100 rounded-xl flex items-center justify-center shadow-lg border border-slate-200 overflow-hidden">
+      <span className="text-2xl font-black leading-none bg-gradient-to-r from-indigo-600 via-blue-600 to-fuchsia-500 bg-clip-text text-transparent">psi</span>
+      <div className="absolute w-2 h-2 bg-fuchsia-500 rounded-full top-2 right-2 border-2 border-white animate-pulse"></div>
+     </div>
+  </div>
 );
 
-export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, onOpenSettings, onShowHistory }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView, managerName, onOpenSettings, onShowHistory, onShowIdentity, onNewEntryClick }) => {
   const navItems = [
-    { id: 'dashboard', label: '통합 대시보드', sub: 'Main Dashboard', icon: <LayoutDashboard size={20} /> },
-    { id: 'new', label: '스마트 TBM 등록', sub: 'New TBM Entry', icon: <PlusCircle size={20} /> },
-    { id: 'risk-assessment', label: '위험성평가 관리', sub: 'Risk Management', icon: <ShieldCheck size={20} /> },
-    { id: 'reports', label: '보고서 센터', sub: 'Report & Print', icon: <FileText size={20} /> },
+    { id: 'dashboard', label: '통합 관제 대시보드', sub: '관제 센터', icon: <LayoutDashboard size={20} /> },
+    { id: 'new', label: '스마트 TBM 지휘', sub: '작업 운영', icon: <PlusCircle size={20} /> },
+    { id: 'risk-assessment', label: '위험성평가 관리', sub: '위험 관리', icon: <ShieldCheck size={20} /> },
+    { id: 'reports', label: '디지털 문서 보관소', sub: '보안 보관소', icon: <FileText size={20} /> },
+    { id: 'data-lab', label: '안전데이터 심층연구', sub: '심층 분석', icon: <Microscope size={20} /> },
   ];
+
+  const handleNavClick = (id: string) => {
+      if (id === 'new') {
+          onNewEntryClick();
+      } else {
+          setCurrentView(id);
+      }
+  };
 
   return (
     <>
-      {/* Mobile Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex justify-between md:hidden z-50 no-print shadow-[0_-4px_20px_rgba(0,0,0,0.05)] safe-area-bottom">
+      {/* Mobile Bottom Nav (Glass) */}
+      <div className="fixed bottom-0 left-0 right-0 glass border-t border-white/20 px-6 py-3 flex justify-between md:hidden z-50 no-print safe-area-bottom">
         {navItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => setCurrentView(item.id)}
-            className={`flex flex-col items-center gap-1 transition-colors ${
-              currentView === item.id ? 'text-blue-600' : 'text-slate-400'
+            onClick={() => handleNavClick(item.id)}
+            className={`flex flex-col items-center gap-1 transition-all ${
+              currentView === item.id ? 'text-blue-600 scale-105' : 'text-slate-400'
             }`}
           >
             {item.icon}
-            <span className="text-[10px] font-bold">{item.sub.split(' ')[0]}</span>
+            <span className="text-[9px] font-bold">{item.label.split(' ')[0]}</span>
           </button>
         ))}
         <button
@@ -54,169 +62,116 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentV
           className="flex flex-col items-center gap-1 transition-colors text-slate-400"
         >
           <Settings size={20} />
-          <span className="text-[10px] font-bold">Settings</span>
+          <span className="text-[10px] font-bold">설정</span>
         </button>
       </div>
 
-      {/* Desktop Sidebar - Premium Dark Theme */}
-      <div className="hidden md:flex flex-col w-72 h-screen fixed left-0 top-0 no-print bg-[#0F172A] text-slate-300 z-50 shadow-2xl overflow-hidden">
+      {/* Desktop Sidebar - Midnight Steel Theme */}
+      <div className="hidden md:flex flex-col w-72 h-screen fixed left-0 top-0 no-print bg-[#0F172A] text-slate-300 z-50 shadow-[4px_0_24px_rgba(0,0,0,0.3)] overflow-hidden border-r border-slate-800">
         
-        {/* Decorative Background Elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
+        {/* Architectural Noise Texture on Sidebar too */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E")`}}></div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        
+        {/* 1. Header */}
+        <div className="p-8 relative z-10">
+          <div className="flex items-center gap-4 mb-2 cursor-pointer" onClick={onShowIdentity} onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onShowIdentity();
+            }
+          }} role="button" tabIndex={0} aria-label="시스템 아이덴티티 열기">
+             <BrandLogo />
+             <div>
+               <h1 className="font-black text-xl leading-none text-white tracking-tight mb-1 font-sans">PSI</h1>
+               <span className="text-[9px] font-bold text-slate-500 tracking-[0.16em] uppercase block">Human Risk Intelligence</span>
+             </div>
+          </div>
+          <div className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">시스템 정상 운영</span>
+          </div>
+        </div>
+        
+        {/* 2. Navigation List */}
+        <div className="flex-1 px-4 py-2 relative z-10 overflow-y-auto custom-scrollbar space-y-1">
+          <p className="text-[10px] font-extrabold text-slate-600 px-4 mb-3 uppercase tracking-widest">주요 모듈</p>
+          
+          {navItems.map((item) => {
+            const isActive = currentView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item.id)}
+                className={`
+                  w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 group relative overflow-hidden
+                  ${isActive 
+                    ? 'bg-gradient-to-r from-blue-900/40 to-slate-900/40 border border-blue-500/30 text-white shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
+                    : 'hover:bg-white/5 hover:text-white border border-transparent'
+                  }
+                `}
+              >
+                {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-l-xl"></div>}
+                <div className="flex items-center gap-3.5 pl-1">
+                  <span className={`transition-colors duration-300 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                    {item.icon}
+                  </span>
+                  <div className="flex flex-col items-start">
+                    <span className={`text-sm font-bold leading-none mb-0.5 ${isActive ? 'text-white' : 'text-slate-300'}`}>{item.label}</span>
+                    <span className={`text-[9px] font-medium tracking-wide uppercase ${isActive ? 'text-blue-300' : 'text-slate-600'}`}>
+                      {item.sub}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
 
-        {/* 1. Brand Header (Fixed Top Left) */}
-        <div className="p-6 pb-2 relative z-10">
-          <div className="flex flex-col gap-1 mb-6">
-            <span className="text-[11px] font-extrabold text-blue-400 tracking-[0.2em] uppercase border-b border-slate-700 pb-2 mb-2">
-              (주)휘강건설
-            </span>
-            <div className="flex items-center gap-3">
-               <BrandLogo />
-               <div>
-                 <h1 className="font-black text-xl leading-none text-white tracking-tight">HUIGANG SMART<br/>SAFETY</h1>
-               </div>
-            </div>
+          <div className="pt-8 px-1">
+             <div className="rounded-xl bg-gradient-to-br from-indigo-950/80 to-slate-900/80 border border-indigo-500/20 p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-colors">
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2 text-indigo-400">
+                        <Sparkles size={16} className="animate-pulse"/>
+                      <span className="text-[10px] font-black uppercase tracking-widest">AI 비전 코어</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
+                       현장 영상을 <span className="text-indigo-300 font-bold">실시간 분석</span>하여<br/>
+                       잠재 위험을 예측합니다.
+                    </p>
+                </div>
+             </div>
+          </div>
+        </div>
+        
+        {/* 3. Footer Profile - UPGRADED DESIGN */}
+        <div className="p-4 relative z-10 border-t border-slate-800/50 bg-[#0B1120]">
+          <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group mb-1" onClick={onOpenSettings} onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpenSettings();
+            }
+          }} role="button" tabIndex={0} aria-label="환경 설정 열기">
+             <div className="relative shrink-0">
+                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 text-slate-400 font-bold text-xs overflow-hidden bg-gradient-to-br from-slate-700 to-slate-800 shadow-inner">
+                   <User size={18} className="text-slate-300"/>
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 w-3 h-3 rounded-full border-2 border-[#0B1120]"></div>
+             </div>
+             <div className="flex-1 min-w-0">
+               <p className="text-xs font-bold text-white truncate">{managerName || '현장 관리자'}</p>
+               <p className="text-[10px] text-slate-500 truncate">안전관리팀 / 책임자</p>
+             </div>
+             <Settings size={16} className="text-slate-600 group-hover:text-slate-300 transition-colors"/>
           </div>
           
-          {/* Site Badge */}
-          <div className="bg-slate-800/50 backdrop-blur-md rounded-lg p-3 border border-slate-700/50 flex items-center gap-3 group hover:border-blue-500/30 transition-colors cursor-default">
-            <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs shadow-lg">
-              YP
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Project Site</p>
-              <p className="text-xs font-bold text-slate-100 leading-tight">
-                용인 푸르지오 원클러스터<br/>
-                <span className="text-blue-400">2,3단지 현장</span>
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        {/* 2. Navigation Items */}
-        <div className="flex-1 px-4 py-6 relative z-10 overflow-y-auto custom-scrollbar">
-          <p className="text-[10px] font-bold text-slate-500 mb-3 px-3 uppercase tracking-wider">System Menu</p>
-          <div className="space-y-1.5 mb-8">
-            {navItems.map((item) => {
-              const isActive = currentView === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentView(item.id)}
-                  className={`
-                    w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 group relative overflow-hidden
-                    ${isActive 
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-900/30 border border-blue-500/50' 
-                      : 'hover:bg-slate-800/50 hover:text-white border border-transparent hover:border-slate-700'
-                    }
-                  `}
-                >
-                  <div className="flex items-center gap-3 relative z-10">
-                    <span className={isActive ? 'text-blue-100' : 'text-slate-500 group-hover:text-slate-300 transition-colors'}>
-                      {item.icon}
-                    </span>
-                    <div className="flex flex-col items-start">
-                      <span className={`text-sm font-bold ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white transition-colors'}`}>
-                        {item.label}
-                      </span>
-                      <span className={`text-[10px] font-medium ${isActive ? 'text-blue-200' : 'text-slate-600 group-hover:text-slate-500'}`}>
-                        {item.sub}
-                      </span>
-                    </div>
-                  </div>
-                  {isActive && <ChevronRight size={14} className="opacity-80 relative z-10" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* New: System Branding / Introduction Section */}
-          <div className="px-2">
-             <div className="rounded-2xl bg-gradient-to-br from-indigo-900/50 to-violet-900/50 border border-indigo-500/30 p-4 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-3 opacity-20"><Sparkles size={48} className="text-white"/></div>
-                <h4 className="text-white font-bold text-xs mb-1 relative z-10">Smart Safety AI</h4>
-                <p className="text-[10px] text-indigo-200 leading-relaxed relative z-10 mb-3">
-                   현장의 안전을 지키는 가장 지능적인 방법. Vision AI가 위험 요인을 사전에 감지합니다.
-                </p>
-                <div className="flex gap-1">
-                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                   <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                   <span className="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
-                </div>
-             </div>
-          </div>
-        </div>
-        
-        {/* 3. Premium User Profile Footer */}
-        <div className="p-4 relative z-10">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 border border-slate-700 shadow-xl group hover:border-slate-600 transition-all">
-             <div className="flex items-center justify-between mb-3 border-b border-slate-700/50 pb-3">
-                <div className="flex items-center gap-1.5">
-                   <Shield size={12} className="text-emerald-500" />
-                   <span className="text-[10px] font-bold text-emerald-500 tracking-wider uppercase">Safety Master</span>
-                </div>
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-             </div>
-             
-             <div className="flex items-center gap-3">
-                <div className="relative">
-                   <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center border-2 border-slate-600 overflow-hidden">
-                      {/* Avatar Placeholder */}
-                      <span className="font-bold text-white">박</span>
-                   </div>
-                   <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.5 rounded border border-slate-800 shadow-sm">
-                      SAM
-                   </div>
-                </div>
-                <div>
-                   <p className="text-[10px] text-blue-400 font-bold tracking-wide">Safety Assistant Manager</p>
-                   <div className="flex items-baseline gap-1">
-                     <p className="text-sm font-black text-white tracking-tight">박성훈 부장</p>
-                     <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">WITH 이다애 기사</span>
-                   </div>
-                </div>
-             </div>
-             
-             {/* Updated Footer Actions - Clean & Professional */}
-             <div className="mt-4 pt-4 border-t border-slate-700/50 flex flex-col gap-3">
-                <button 
-                  onClick={onShowHistory}
-                  className="w-full group relative overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl p-3 transition-all duration-300 shadow-sm"
-                >
-                  <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
-                    <History size={48} className="text-white transform rotate-12 translate-x-2 -translate-y-2" />
-                  </div>
-                  <div className="relative flex items-center justify-between">
-                    <div className="flex flex-col items-start">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-300">Update Log</span>
-                      </div>
-                      <span className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">개발 히스토리</span>
-                    </div>
-                    <div className="h-8 w-8 rounded-lg bg-slate-950/50 border border-slate-700 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:border-slate-500 transition-all">
-                       <ChevronRight size={14} />
-                    </div>
-                  </div>
-                </button>
-
-                <div className="flex items-center justify-between px-2">
-                   <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-slate-500">v2.7.3 Stable</span>
-                   </div>
-                   <button 
-                     onClick={onOpenSettings}
-                     className="flex items-center gap-1.5 text-slate-500 hover:text-white hover:bg-slate-700/50 px-2 py-1.5 rounded-lg transition-all"
-                   >
-                     <Settings size={12} />
-                     <span className="text-[10px] font-bold">설정</span>
-                   </button>
-                </div>
-             </div>
-          </div>
-          <div className="text-center mt-3">
-             <p className="text-[9px] text-slate-600 font-medium">© 2025 (주)휘강건설 System</p>
+          <div className="flex justify-between items-center px-1">
+              <button onClick={onShowHistory} className="text-[10px] text-slate-600 font-bold hover:text-slate-400 transition-colors flex items-center gap-1">
+                  <History size={10}/> 변경 이력
+              </button>
+              <button onClick={onShowIdentity} className="text-[10px] text-slate-600 font-bold hover:text-blue-400 transition-colors tracking-widest uppercase">
+                  시스템 아이덴티티
+              </button>
           </div>
         </div>
       </div>

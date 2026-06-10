@@ -10,11 +10,18 @@ export const TEAMS: TeamOption[] = [
   { id: 'form-kch', name: '김철희팀', category: TeamCategory.FORMWORK },
   { id: 'form-lsj', name: '이세정팀', category: TeamCategory.FORMWORK },
   
+  // [NEW] 갱폼/알폼
+  { id: 'gang-1', name: '갱폼인양팀', category: TeamCategory.GANGFORM },
+  { id: 'al-1', name: '알폼세팅팀', category: TeamCategory.ALFORM },
+
   // 철근 팀들
   { id: 'rebar-1', name: '철근팀', category: TeamCategory.REBAR },
   
   // 할석/미장/견출 통합
   { id: 'finish-integrated', name: '할석미장견출', category: TeamCategory.FINISHING },
+
+  // [NEW] 해체/정리
+  { id: 'dismantle-1', name: '해체정리팀', category: TeamCategory.DISMANTLE },
 
   // 기타 팀들
   { id: 'system-1', name: '시스템팀', category: TeamCategory.SYSTEM },
