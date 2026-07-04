@@ -820,7 +820,8 @@ const App = () => {
                   ...entry,
                   riskFactors: Array.isArray(entry.riskFactors) ? entry.riskFactors : [],
                   safetyFeedback: Array.isArray(entry.safetyFeedback) ? entry.safetyFeedback : [],
-                  ...buildEntryTeamPayload(getEntryTeamIds(entry), teams, getEntryTeamNames(entry)),
+                  createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : (entry.date ? Date.parse(entry.date) : Date.now()),
+                  ...buildEntryTeamPayload(getEntryTeamIds(entry), teams, getEntryTeamNames(entry, teams)),
               };
 
               const rawId = normalizedEntry.id;

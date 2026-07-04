@@ -58,9 +58,14 @@ export const entryHasTeamId = (entry: Partial<TBMEntry>, targetId: string) => {
 
 export const buildEntryTeamPayload = (selectedTeamIds: string[], teams: TeamOption[], fallbackNames: string[] = []) => {
   const teamIds = normalizeList(selectedTeamIds);
-  const teamNames = teamIds.length > 0
+  let teamNames = teamIds.length > 0
     ? normalizeList(teamIds.map(teamId => teams.find(team => team.id === teamId)?.name || ''))
-    : normalizeList(fallbackNames);
+    : [];
+
+  // If we couldn't resolve any team names from the current database, fall back to fallbackNames
+  if (teamNames.length === 0 && fallbackNames.length > 0) {
+    teamNames = normalizeList(fallbackNames);
+  }
 
   return {
     teamId: teamIds[0] || '',

@@ -182,11 +182,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleBackupClick = (scope: 'ALL' | 'TBM' | 'RISK') => {
+        // Trigger download synchronously to preserve user activation context
+        onBackupData(scope);
+        
         setIsBackingUp(true);
         setTimeout(() => {
-            onBackupData(scope);
             if (mountedRef.current) setIsBackingUp(false);
-        }, 500); 
+        }, 800); 
     };
 
     const onInputClick = (e: React.MouseEvent<HTMLInputElement>) => {
