@@ -909,7 +909,9 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          URL.revokeObjectURL(url);
+          setTimeout(() => {
+              URL.revokeObjectURL(url);
+          }, 10000);
       } else if (singleImageBlob) {
           const safeTeamName = getEntryTeamLabel(entries[0], teams).replace(/[\/\\?%*:|"<>]/g, '_');
           exportedFileName = `TBM_일지_${entries[0].date}_${safeTeamName}.png`;
@@ -924,7 +926,9 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          URL.revokeObjectURL(url);
+          setTimeout(() => {
+              URL.revokeObjectURL(url);
+          }, 10000);
       }
 
                         setExportProgress(100);

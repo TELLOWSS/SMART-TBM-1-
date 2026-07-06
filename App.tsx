@@ -584,11 +584,11 @@ const App = () => {
           if (scope === 'ALL') {
               backupData.teams = teams;
               backupData.signatures = signatures;
-              backupData.teamNormalizationLogs = teamNormalizationLogs;
-              backupData.teamNormalizationRequests = teamNormalizationRequests;
+              backupData.teamNormalizationLogs = teamNormalizationLogs as any;
+              backupData.teamNormalizationRequests = teamNormalizationRequests as any;
               backupData.activityLogs = activityLogs;
-              backupData.labSnapshots = readStoredArray<LabSnapshot>(SNAPSHOT_STORAGE_KEY);
-              backupData.commandTasks = readStoredArray<SmartCommandTask>(COMMAND_TASK_STORAGE_KEY);
+              backupData.labSnapshots = readStoredArray<LabSnapshot>(SNAPSHOT_STORAGE_KEY) as any;
+              backupData.commandTasks = readStoredArray<SmartCommandTask>(COMMAND_TASK_STORAGE_KEY) as any;
               // [SECURITY FIX] Exclude API key from backup file to prevent credential leakage
               const { userApiKey: _stripped, ...siteConfigSafe } = siteConfig;
               backupData.siteConfig = siteConfigSafe;
@@ -690,7 +690,7 @@ const App = () => {
                           fileFound = true;
                       }
                       if (Array.isArray(payloadObject.assessments)) {
-                          const validAss = payloadObject.assessments.filter(isRestoreAssessment).map(sanitizeAssessment);
+                          const validAss = (payloadObject.assessments as any[]).filter(isRestoreAssessment).map(sanitizeAssessment);
                           mergedAssessments = [...validAss, ...mergedAssessments];
                           totalFound += validAss.length;
                           fileFound = true;
@@ -706,7 +706,7 @@ const App = () => {
                           fileFound = true;
                       }
                       if (Array.isArray(payloadObject.teamNormalizationLogs)) {
-                          const validLogs = payloadObject.teamNormalizationLogs.filter((log): log is TeamNormalizationLog => {
+                          const validLogs = (payloadObject.teamNormalizationLogs as any[]).filter((log): log is TeamNormalizationLog => {
                               return !!log && typeof log === 'object'
                                   && typeof (log as TeamNormalizationLog).id === 'string'
                                   && typeof (log as TeamNormalizationLog).actedAt === 'number'
@@ -718,7 +718,7 @@ const App = () => {
                           fileFound = true;
                       }
                       if (Array.isArray(payloadObject.teamNormalizationRequests)) {
-                          const validRequests = payloadObject.teamNormalizationRequests.filter((request): request is TeamNormalizationRequest => {
+                          const validRequests = (payloadObject.teamNormalizationRequests as any[]).filter((request): request is TeamNormalizationRequest => {
                               return !!request && typeof request === 'object'
                                   && typeof (request as TeamNormalizationRequest).id === 'string'
                                   && typeof (request as TeamNormalizationRequest).requestedAt === 'number'
@@ -736,13 +736,13 @@ const App = () => {
                           fileFound = true;
                       }
                       if (Array.isArray(payloadObject.labSnapshots)) {
-                          const validSnapshots = payloadObject.labSnapshots.filter(isRestoreLabSnapshot);
+                          const validSnapshots = (payloadObject.labSnapshots as any[]).filter(isRestoreLabSnapshot);
                           mergedLabSnapshots = [...validSnapshots, ...mergedLabSnapshots];
                           totalFound += validSnapshots.length;
                           fileFound = true;
                       }
                       if (Array.isArray(payloadObject.commandTasks)) {
-                          const validCommandTasks = payloadObject.commandTasks.filter(isRestoreCommandTask);
+                          const validCommandTasks = (payloadObject.commandTasks as any[]).filter(isRestoreCommandTask);
                           mergedCommandTasks = [...validCommandTasks, ...mergedCommandTasks];
                           totalFound += validCommandTasks.length;
                           fileFound = true;

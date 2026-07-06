@@ -333,14 +333,16 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-        setBackupStatusMessage(`위험성평가 ${assessments.length}건 백업 파일을 생성했습니다.`);
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 10000);
+    setBackupStatusMessage(`위험성평가 ${assessments.length}건 백업 파일을 생성했습니다.`);
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-                const invalidFiles = Array.from(files).filter(file => {
+                const invalidFiles = (Array.from(files) as File[]).filter(file => {
                     const lowerName = file.name.toLowerCase();
                     const isJsonMime = file.type === 'application/json' || file.type === 'text/json';
                     const isJsonExt = lowerName.endsWith('.json');

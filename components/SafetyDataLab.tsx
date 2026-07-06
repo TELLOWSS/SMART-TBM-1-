@@ -537,7 +537,8 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
             return acc;
         }, {} as Record<string, { sourceLabel: string; count: number; latestDate: string; hasUnassigned: boolean }>);
 
-        return Object.values(grouped).sort((a, b) => b.count - a.count || b.latestDate.localeCompare(a.latestDate));
+        const groupedArray = Object.values(grouped) as Array<{ sourceLabel: string; count: number; latestDate: string; hasUnassigned: boolean }>;
+        return groupedArray.sort((a, b) => b.count - a.count || b.latestDate.localeCompare(a.latestDate));
     }, [entries, teams]);
 
     const filteredNormalizationLogs = useMemo(() => {
@@ -590,7 +591,7 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
             return acc;
         }, {} as Record<string, number>);
 
-        const topRejectedReasons = Object.entries(reasonCounts)
+        const topRejectedReasons = (Object.entries(reasonCounts) as [string, number][])
             .sort((left, right) => right[1] - left[1])
             .slice(0, 3)
             .map(([reason, count]) => ({ reason, count }));
@@ -786,7 +787,9 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
         link.href = url;
         link.download = `team_normalization_logs_${new Date().toISOString().slice(0, 10)}.csv`;
         link.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 10000);
         announceStatus(`정규화 이력 ${filteredNormalizationLogs.length}건을 CSV로 내보냈습니다.`);
     };
 
@@ -888,7 +891,7 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
             ? Number((linkedEntries.reduce((sum, entry) => sum + (entry.linkedRiskAssessmentHighCount || 0), 0) / linkedEntries.length).toFixed(1))
             : 0;
         const actionNoteLinkedEntries = linkedEntries.filter(entry => (entry.linkedRiskAssessmentActionNoteCount || 0) > 0);
-        const teamLinkageStats = Object.values(filteredEntries.reduce((acc, entry) => {
+        const teamLinkageStats = (Object.values(filteredEntries.reduce((acc, entry) => {
             const teamNames = getEntryTeamNames(entry, teams);
             const labels = teamNames.length > 0 ? teamNames : [getEntryTeamLabel(entry, teams)];
             labels.forEach(teamName => {
@@ -909,7 +912,7 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
                 }
             });
             return acc;
-        }, {} as Record<string, { teamName: string; total: number; linked: number; matched: number }>)).map(item => ({
+        }, {} as Record<string, { teamName: string; total: number; linked: number; matched: number }>)) as { teamName: string; total: number; linked: number; matched: number }[]).map(item => ({
             ...item,
             linkedRate: item.total > 0 ? Math.round((item.linked / item.total) * 100) : 0,
             matchedRate: item.total > 0 ? Math.round((item.matched / item.total) * 100) : 0,
@@ -1288,7 +1291,9 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
             a.href = url;
             a.download = `safety_data_${new Date().toISOString().slice(0, 10)}.csv`;
             a.click();
-            URL.revokeObjectURL(url);
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 10000);
             announceStatus(`CSV ${rows.length}건 내보내기 완료`);
         } catch (error) {
             console.error('[SafetyDataLab] CSV export failed', error);
