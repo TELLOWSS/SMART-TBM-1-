@@ -447,7 +447,14 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
-  const [entryTime, setEntryTime] = useState('07:30');
+  const [entryTime, setEntryTime] = useState(() => {
+      const hours = new Date().getHours();
+      return hours >= 12 ? '13:00' : '07:30';
+  });
+  const [sessionType, setSessionType] = useState<'MORNING' | 'AFTERNOON' | 'SPECIAL' | 'REGULAR'>(() => {
+      const hours = new Date().getHours();
+      return hours >= 12 ? 'AFTERNOON' : 'MORNING';
+  });
     const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(teams[0]?.id ? [teams[0].id] : []);
   const [leaderName, setLeaderName] = useState('');
   const [attendeesCount, setAttendeesCount] = useState<number>(0);
@@ -770,7 +777,25 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
   };
 
   const handleDateChange = (v: string) => { setEntryDate(v); updateActiveItem({ date: v }); };
-  const handleTimeChange = (v: string) => { setEntryTime(v); updateActiveItem({ time: v }); };
+  const handleTimeChange = (v: string) => {
+      setEntryTime(v);
+      const hours = Number(v.split(':')[0] || '0');
+      const nextSession = hours >= 12 ? 'AFTERNOON' : 'MORNING';
+      setSessionType(nextSession);
+      updateActiveItem({ time: v, sessionType: nextSession });
+  };
+  const handleSessionTypeChange = (type: 'MORNING' | 'AFTERNOON' | 'SPECIAL' | 'REGULAR') => {
+      setSessionType(type);
+      let targetTime = entryTime;
+      if (type === 'AFTERNOON' && Number(entryTime.split(':')[0]) < 12) {
+          targetTime = '13:00';
+          setEntryTime(targetTime);
+      } else if (type === 'MORNING' && Number(entryTime.split(':')[0]) >= 12) {
+          targetTime = '07:30';
+          setEntryTime(targetTime);
+      }
+      updateActiveItem({ sessionType: type, time: targetTime });
+  };
   const handleTeamToggle = (nextTeamId: string) => {
       const nextIds = selectedTeamIds.includes(nextTeamId)
           ? selectedTeamIds.filter(teamId => teamId !== nextTeamId)
@@ -2400,8 +2425,36 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                                 <input type="date" value={entryDate} onChange={(e) => handleDateChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"/>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-500">시작 시간</label>
-                                <input type="time" value={entryTime} onChange={(e) => handleTimeChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"/>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-500">시작 시간 및 TBM 세션</label>
+                                    <span className="text-[10px] font-bold text-slate-400">
+                                        {sessionType === 'AFTERNOON' ? '🌤️ 오후 세션' : sessionType === 'SPECIAL' ? '🛡️ 수시 점검' : '☀️ 오전 세션'}
+                                    </span>
+                                </div>
+                                <input type="time" value={entryTime} onChange={(e) => handleTimeChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"/>
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSessionTypeChange('MORNING')}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${sessionType === 'MORNING' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                        ☀️ 오전 TBM
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSessionTypeChange('AFTERNOON')}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${sessionType === 'AFTERNOON' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                        🌤️ 오후 TBM (사진/서면)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSessionTypeChange('SPECIAL')}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${sessionType === 'SPECIAL' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                        🛡️ 수시 점검
+                                    </button>
+                                </div>
                             </div>
                             <div className="space-y-1 col-span-2">
                                 <label className="text-xs font-bold text-slate-500">작업 팀 선택</label>

@@ -125,6 +125,7 @@ export interface ExtractedTBMData {
   safetyFeedback: string[];
   // [UPDATED] Added date detection support
   detectedDate?: string; // YYYY-MM-DD format extracted from document
+  sessionType?: 'MORNING' | 'AFTERNOON' | 'SPECIAL' | 'REGULAR';
   videoAnalysis?: TBMAnalysisResult; // Pass through analysis
 }
 
@@ -132,6 +133,7 @@ export interface TBMEntry {
   id: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
+  sessionType?: 'MORNING' | 'AFTERNOON' | 'SPECIAL' | 'REGULAR';
   teamId: string;
   teamName: string;
   teamIds?: string[];

@@ -1549,7 +1549,9 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
                             </div>
                         </div>
                         <div className="col last" style={{width: '50%'}}>
-                            <div className="section-header">2. TBM 실시 사진 및 동영상</div>
+                            <div className="section-header">
+                                2. {hasVideoEvidence ? 'TBM 실시 사진 및 동영상' : 'TBM 실시 사진 및 현장 점검 기록'}
+                            </div>
                             <div className="h-[calc(100%-30px)] p-2 flex flex-col bg-white">
                                  <div className="flex-1 w-full flex items-center justify-center overflow-hidden border border-slate-200 bg-slate-50 relative rounded-sm mb-1">
                                      {entry.tbmPhotoUrl ? (
@@ -1576,8 +1578,18 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
                                          </div>
                                      </div>
                                  ) : (
-                                     <div className="w-full h-8 flex items-center justify-center border border-dashed border-slate-200 rounded bg-slate-50 text-[9px] text-slate-300">
-                                         동영상 기록 없음
+                                     <div className="w-full bg-emerald-50/90 border border-emerald-300 rounded px-2 py-1 flex items-center justify-between shrink-0 h-8">
+                                         <div className="flex items-center gap-1.5">
+                                             <CheckCircle2 size={13} className="text-emerald-600 shrink-0"/>
+                                             <span className="text-[10px] font-extrabold text-emerald-900 tracking-tight">
+                                                 {entry.sessionType === 'AFTERNOON' || (entry.time && Number(entry.time.split(':')[0]) >= 12)
+                                                     ? '오후 TBM 현장 사진 및 서면 점검 완료'
+                                                     : '현장 사진 및 서면 점검 기록 완료'}
+                                             </span>
+                                         </div>
+                                         <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                             점검 완료
+                                         </span>
                                      </div>
                                  )}
                             </div>
