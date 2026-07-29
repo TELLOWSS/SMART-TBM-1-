@@ -1532,7 +1532,7 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
                         <div className="row last" style={{ height: '39px' }}>
                             <div className="col bg-slate-50 flex-center font-extrabold text-black" style={{width: '12%'}}>작업 위치</div>
                             <div className="col px-3 flex items-center font-bold text-black" style={{width: '88%'}}>
-                                <span className="text-[11px] leading-snug break-keep">{safeLocation || '내용 없음'}</span>
+                                 <span className="text-[11px] leading-snug break-keep">{safeLocation || '현장 작업 구역'}</span>
                             </div>
                         </div>
                     </div>
@@ -1606,77 +1606,93 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
                                     <div className="text-[11px] leading-relaxed text-wrap-fix text-black min-h-[50px]">
                                         {entry.workDescription || "내용 없음"}
                                     </div>
-                                    <div className="report-pane-card mt-3 rounded border border-sky-200 bg-sky-50 px-2 py-2 min-h-[64px]">
-                                        <div className="report-pane-subtitle text-[10px] font-extrabold text-sky-700 mb-1">[작업 위치]</div>
-                                        <div className="text-[10px] leading-snug text-black break-keep">
-                                            {safeLocation || '내용 없음'}
-                                        </div>
-                                    </div>
-                                    <div className="mt-2 grid grid-cols-1 gap-2">
-                                        <div className="report-pane-card rounded border border-amber-200 bg-amber-50 px-2 py-2 min-h-[72px]">
-                                            <div className="report-pane-subtitle text-[10px] font-extrabold text-amber-700 mb-1">[금일 설치한 사항]</div>
-                                            <div className="text-[10px] leading-snug text-black break-keep">
-                                                {entry.todayInstalledItems || '내용 없음'}
-                                            </div>
-                                        </div>
-                                        <div className="report-pane-card rounded border border-violet-200 bg-violet-50 px-2 py-2 min-h-[72px]">
-                                            <div className="report-pane-subtitle text-[10px] font-extrabold text-violet-700 mb-1">[관리자 추가 설치 필요 항목]</div>
-                                            <div className="text-[10px] leading-snug text-black break-keep">
-                                                {entry.managerRequiredInstallItems || '내용 없음'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {entry.linkedRiskAssessmentLabel && (
-                                        <div className="report-pane-card mt-2 rounded border border-indigo-200 bg-indigo-50 px-2 py-1.5">
-                                            <div className="flex items-center gap-1 flex-wrap">
-                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${entry.linkedRiskAssessmentMatchedByMonth ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'}`}>
-                                                    {entry.linkedRiskAssessmentMatchedByMonth ? '동일월 위험성평가 연계' : '위험성평가 연계'}
-                                                </span>
-                                                <span className="text-[10px] font-bold text-slate-700">{entry.linkedRiskAssessmentLabel}</span>
-                                            </div>
-                                            <div className="mt-1 text-[9px] text-slate-600 flex items-center gap-2 flex-wrap">
-                                                <span>상위험 {entry.linkedRiskAssessmentHighCount ?? 0}건</span>
-                                                <span>조치메모 {entry.linkedRiskAssessmentActionNoteCount ?? 0}건</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="report-pane-card risk-focus-block flex-1 border border-orange-300 rounded flex flex-col min-h-0 bg-white">
-                                    <div className="bg-orange-50 p-1.5 text-center text-[10px] font-bold text-orange-700 border-b border-orange-200 shrink-0">⚠ 중점 위험 관리 사항</div>
-                                    <div className="report-pane-inner-pad p-2 overflow-hidden flex flex-col">
-                                        <table className="w-full border-collapse">
-                                            <tbody>
-                                                {(entry.riskFactors || []).slice(0,5).map((risk, i) => (
-                                                    <React.Fragment key={i}>
-                                                        <tr className="border-b border-dashed border-slate-200 last:border-0">
-                                                            <td className="w-9 align-middle badge-cell">
-                                                                <span className="inline-block w-8 text-center bg-red-100 text-red-600 border border-red-200 rounded text-[9px] font-bold py-0.5">위험</span>
-                                                            </td>
-                                                            <td className="align-middle pl-1 text-cell">
-                                                                <span className="risk-line-text text-[10px] text-black leading-snug break-keep block dense-export-text">{risk.risk}</span>
-                                                            </td>
-                                                        </tr>
-                                                        <tr className="border-b border-dashed border-slate-200 last:border-0 mb-1">
-                                                            <td className="w-9 align-middle pb-2 badge-cell">
-                                                                <span className="inline-block w-8 text-center bg-blue-100 text-blue-600 border border-blue-200 rounded text-[9px] font-bold py-0.5">대책</span>
-                                                            </td>
-                                                            <td className="align-middle pl-1 pb-2 text-cell">
-                                                                <span className="risk-line-text text-[10px] text-black leading-snug break-keep block dense-export-text">{risk.measure}</span>
-                                                            </td>
-                                                        </tr>
-                                                    </React.Fragment>
-                                                ))}
-                                                {(!entry.riskFactors || entry.riskFactors.length === 0) && (
-                                                    <tr>
-                                                        <td colSpan={2} className="text-center text-[10px] text-slate-300 py-8">항목 없음</td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                                    
+                                     {safeLocation ? (
+                                         <div className="report-pane-card mt-2 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 min-h-0">
+                                             <div className="report-pane-subtitle text-[10px] font-extrabold text-sky-700 mb-0.5">[작업 위치]</div>
+                                             <div className="text-[10px] leading-snug text-black break-keep">
+                                                 {safeLocation}
+                                             </div>
+                                         </div>
+                                     ) : null}
+
+                                     {(entry.todayInstalledItems?.trim() || entry.managerRequiredInstallItems?.trim()) ? (
+                                         <div className="mt-2 space-y-2">
+                                             {entry.todayInstalledItems?.trim() ? (
+                                                 <div className="report-pane-card rounded border border-amber-200 bg-amber-50 px-2 py-1.5 min-h-0">
+                                                     <div className="report-pane-subtitle text-[10px] font-extrabold text-amber-700 mb-0.5">[금일 설치한 사항]</div>
+                                                     <div className="text-[10px] leading-snug text-black break-keep">
+                                                         {entry.todayInstalledItems}
+                                                     </div>
+                                                 </div>
+                                             ) : null}
+                                             {entry.managerRequiredInstallItems?.trim() ? (
+                                                 <div className="report-pane-card rounded border border-violet-200 bg-violet-50 px-2 py-1.5 min-h-0">
+                                                     <div className="report-pane-subtitle text-[10px] font-extrabold text-violet-700 mb-0.5">[관리자 추가 설치 필요 항목]</div>
+                                                     <div className="text-[10px] leading-snug text-black break-keep">
+                                                         {entry.managerRequiredInstallItems}
+                                                     </div>
+                                                 </div>
+                                             ) : null}
+                                         </div>
+                                     ) : null}
+
+                                     {entry.linkedRiskAssessmentLabel && (
+                                         <div className="report-pane-card mt-2 rounded border border-indigo-200 bg-indigo-50 px-2 py-1.5">
+                                             <div className="flex items-center gap-1 flex-wrap">
+                                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${entry.linkedRiskAssessmentMatchedByMonth ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'}`}>
+                                                     {entry.linkedRiskAssessmentMatchedByMonth ? '동일월 위험성평가 연계' : '위험성평가 연계'}
+                                                 </span>
+                                                 <span className="text-[10px] font-bold text-slate-700">{entry.linkedRiskAssessmentLabel}</span>
+                                             </div>
+                                             <div className="mt-1 text-[9px] text-slate-600 flex items-center gap-2 flex-wrap">
+                                                 <span>상위험 {entry.linkedRiskAssessmentHighCount ?? 0}건</span>
+                                                 <span>조치메모 {entry.linkedRiskAssessmentActionNoteCount ?? 0}건</span>
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+                                 <div className="report-pane-card risk-focus-block flex-1 border border-orange-300 rounded flex flex-col min-h-0 bg-white">
+                                     <div className="bg-orange-50 p-1.5 text-center text-[10px] font-bold text-orange-700 border-b border-orange-200 shrink-0">⚠ 중점 위험 관리 사항</div>
+                                     <div className="report-pane-inner-pad p-2 overflow-hidden flex flex-col">
+                                         {(() => {
+                                             const displayRiskFactors = (entry.riskFactors && entry.riskFactors.length > 0)
+                                                 ? entry.riskFactors.slice(0, 5)
+                                                 : [
+                                                     { risk: '작업 전 개인 보호구(안전모·안전화) 착용 상태 상호 점검', measure: '작업 구역 내 개인 보호구 100% 착용 및 단속 실시' },
+                                                     { risk: '작업 구역 내 정리정돈 및 안전 통로 확보', measure: '전도 및 낙하 위험물 사전 제거 및 동선 유도' }
+                                                   ];
+                                             return (
+                                                 <table className="w-full border-collapse">
+                                                     <tbody>
+                                                         {displayRiskFactors.map((risk, i) => (
+                                                             <React.Fragment key={i}>
+                                                                 <tr className="border-b border-dashed border-slate-200 last:border-0">
+                                                                     <td className="w-9 align-middle badge-cell">
+                                                                         <span className="inline-block w-8 text-center bg-red-100 text-red-600 border border-red-200 rounded text-[9px] font-bold py-0.5">위험</span>
+                                                                     </td>
+                                                                     <td className="align-middle pl-1 text-cell">
+                                                                         <span className="risk-line-text text-[10px] text-black leading-snug break-keep block dense-export-text">{risk.risk}</span>
+                                                                     </td>
+                                                                 </tr>
+                                                                 <tr className="border-b border-dashed border-slate-200 last:border-0 mb-1">
+                                                                     <td className="w-9 align-middle pb-2 badge-cell">
+                                                                         <span className="inline-block w-8 text-center bg-blue-100 text-blue-600 border border-blue-200 rounded text-[9px] font-bold py-0.5">대책</span>
+                                                                     </td>
+                                                                     <td className="align-middle pl-1 pb-2 text-cell">
+                                                                         <span className="risk-line-text text-[10px] text-black leading-snug break-keep block dense-export-text">{risk.measure}</span>
+                                                                     </td>
+                                                                 </tr>
+                                                             </React.Fragment>
+                                                         ))}
+                                                     </tbody>
+                                                 </table>
+                                             );
+                                         })()}
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
                         
                         <div className="col last right-ai-col flex flex-col" style={{width: '50%'}}>
                                 <div className="section-header body-pane-header">
