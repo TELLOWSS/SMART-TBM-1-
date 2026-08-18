@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useRef } from 'react';
 import { TBMEntry } from '../types';
-import { entryHasTeamName, getEntryTeamLabel, getEntryTeamNames } from '../utils/teamUtils';
+import { entryHasTeamName, getEntryTeamLabel, getEntryTeamNames, getWorkDescriptionDisplay } from '../utils/teamUtils';
 import { Users, FileText, BarChart2, ShieldAlert, Trash2, Radio, CloudRain, Sun, CloudSnow, MapPin, ArrowRight, ShieldCheck, Activity, Microscope, Clock, Siren, CheckCircle2, AlertTriangle, Wind, Droplets, RefreshCw, CloudLightning, Cloud, Eye, Mic, Shield, ChevronDown, ClipboardCheck } from 'lucide-react';
 
 interface DashboardProps {
@@ -998,7 +998,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, siteName, normali
                                             <span className="text-xs font-bold text-slate-700 truncate max-w-[58%]">{entry.teamName}</span>
                                             <span className="text-[10px] text-slate-400 font-mono">{entry.time}</span>
                                         </div>
-                                        <p className="text-[10px] text-slate-500 truncate">{entry.workDescription || '내용 없음'}</p>
+                                        <p className="text-[10px] text-slate-500 truncate">{getWorkDescriptionDisplay(entry)}</p>
                                         {formatLocationSummary(entry) && (
                                             <div className="mt-1 flex items-center gap-1 text-[9px] text-sky-700 bg-sky-50 border border-sky-100 rounded px-1.5 py-1 max-w-full">
                                                 <MapPin size={10} className="shrink-0"/>

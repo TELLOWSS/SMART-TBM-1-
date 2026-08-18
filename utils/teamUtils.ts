@@ -74,3 +74,15 @@ export const buildEntryTeamPayload = (selectedTeamIds: string[], teams: TeamOpti
     teamNames,
   };
 };
+
+export const getWorkDescriptionDisplay = (entry?: Partial<TBMEntry> | { sessionType?: string; time?: string; workDescription?: string }) => {
+  if (!entry) return '내용 없음';
+  const isAfternoon = entry.sessionType === 'AFTERNOON' || (!!entry.time && Number(entry.time.split(':')[0]) >= 12);
+  const rawDesc = (entry.workDescription || '').trim();
+  const isEmpty = !rawDesc || rawDesc === '작업없음' || rawDesc === '내용 없음' || rawDesc === '작업 내용 식별 불가';
+
+  if (isAfternoon) {
+    return isEmpty ? '오전과 동일함' : rawDesc;
+  }
+  return isEmpty ? '내용 없음' : rawDesc;
+};

@@ -2,7 +2,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TBMEntry, TeamOption } from '../types';
-import { getEntryTeamLabel } from '../utils/teamUtils';
+import { getEntryTeamLabel, getWorkDescriptionDisplay } from '../utils/teamUtils';
 import { Printer, X, Download, Loader2, Edit3, Trash2, Sparkles, UserCheck, AlertOctagon, Eye, Users, Video, FileVideo, ImageOff, CheckCircle2, XCircle, Image as ImageIcon, Package, FileText, Mic, ShieldCheck, Lock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -1604,7 +1604,7 @@ export const ReportView: React.FC<ReportViewProps> = ({ entries, teams, siteName
                                 <div>
                                     <div className="report-pane-title text-[11px] font-extrabold text-slate-800 mb-1 border-b border-slate-200 inline-block pb-0.5">[작업 내용]</div>
                                     <div className="text-[11px] leading-relaxed text-wrap-fix text-black min-h-[50px]">
-                                        {entry.workDescription || "내용 없음"}
+                                        {getWorkDescriptionDisplay(entry)}
                                     </div>
                                     
                                      {safeLocation ? (

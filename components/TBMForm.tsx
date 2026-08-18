@@ -6,7 +6,7 @@ import { analyzeMasterLog, evaluateTBMVideo, generateSafetyFeedback } from '../s
 import { SESSION_API_KEY_STORAGE_KEY } from '../utils/siteConfigStorage';
 import { compressVideo, type VideoCompressionResult } from '../utils/videoUtils';
 import { buildManualEvaluation, MANUAL_EVALUATION_LEVELS, type ManualEvaluationLevel } from '../utils/manualEvaluationTemplates';
-import { buildEntryTeamPayload, getEntryTeamIds, getEntryTeamNames } from '../utils/teamUtils';
+import { buildEntryTeamPayload, getEntryTeamIds, getEntryTeamNames, getWorkDescriptionDisplay } from '../utils/teamUtils';
 import { Upload, Camera, FileText, X, Layers, ArrowLeft, Trash2, Film, Save, Plus, UserCheck, BrainCircuit, CheckCircle2, AlertCircle, Loader2, PlayCircle, Zap, Image as ImageIcon, Copy, Sparkles, Maximize, ScanText, ChevronRight, ChevronDown, ChevronUp, SplitSquareHorizontal, Paperclip, Users, Eye, Mic, Edit3, Sliders, Shield, Award, ClipboardCheck } from 'lucide-react';
 
 interface TBMFormProps {
@@ -740,12 +740,21 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
           
           setEntryDate(activeItem.date || todayStr);
-          setEntryTime(activeItem.time || '07:30');
+          const itemTime = activeItem.time || '07:30';
+          setEntryTime(itemTime);
+          const itemSession = activeItem.sessionType || (Number(itemTime.split(':')[0] || '0') >= 12 ? 'AFTERNOON' : 'MORNING');
+          setSessionType(itemSession);
           const restoredTeamIds = getEntryTeamIds(activeItem);
           setSelectedTeamIds(restoredTeamIds.length > 0 ? restoredTeamIds : (teams[0]?.id ? [teams[0].id] : []));
           setLeaderName(activeItem.leaderName || '');
           setAttendeesCount(activeItem.attendeesCount || 0);
-          setWorkDescription(activeItem.workDescription || '');
+
+          const resolvedWork = getWorkDescriptionDisplay({
+              sessionType: itemSession,
+              time: itemTime,
+              workDescription: activeItem.workDescription
+          });
+          setWorkDescription(activeItem.workDescription !== undefined && activeItem.workDescription !== '' ? activeItem.workDescription : (itemSession === 'AFTERNOON' ? resolvedWork : ''));
           setLocationBuildingScope(activeItem.locationBuildingScope || '');
           setLocationArea(activeItem.locationArea || '');
           setLocationDetail(activeItem.locationDetail || '');
@@ -782,7 +791,13 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
       const hours = Number(v.split(':')[0] || '0');
       const nextSession = hours >= 12 ? 'AFTERNOON' : 'MORNING';
       setSessionType(nextSession);
-      updateActiveItem({ time: v, sessionType: nextSession });
+      
+      let nextWork = workDescription;
+      if (nextSession === 'AFTERNOON' && (!workDescription || workDescription.trim() === '' || workDescription === '작업없음' || workDescription === '내용 없음')) {
+          nextWork = '오전과 동일함';
+          setWorkDescription(nextWork);
+      }
+      updateActiveItem({ time: v, sessionType: nextSession, workDescription: nextWork });
   };
   const handleSessionTypeChange = (type: 'MORNING' | 'AFTERNOON' | 'SPECIAL' | 'REGULAR') => {
       setSessionType(type);
@@ -794,7 +809,13 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
           targetTime = '07:30';
           setEntryTime(targetTime);
       }
-      updateActiveItem({ sessionType: type, time: targetTime });
+      
+      let nextWork = workDescription;
+      if (type === 'AFTERNOON' && (!workDescription || workDescription.trim() === '' || workDescription === '작업없음' || workDescription === '내용 없음')) {
+          nextWork = '오전과 동일함';
+          setWorkDescription(nextWork);
+      }
+      updateActiveItem({ sessionType: type, time: targetTime, workDescription: nextWork });
   };
   const handleTeamToggle = (nextTeamId: string) => {
       const nextIds = selectedTeamIds.includes(nextTeamId)
@@ -1604,7 +1625,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
               ...buildEntryTeamPayload(getEntryTeamIds(item), teams, getEntryTeamNames(item, teams)),
               leaderName: item.leaderName || '',
               attendeesCount: item.attendeesCount || 0,
-              workDescription: item.workDescription || '',
+              workDescription: getWorkDescriptionDisplay(item),
               locationBuildingScope: item.locationBuildingScope || '',
               locationArea: item.locationArea || '',
               locationDetail: item.locationDetail || '',
@@ -2499,7 +2520,7 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
 
                         <div className="space-y-1">
                             <label className="text-xs font-bold text-slate-500">금일 작업 내용</label>
-                            <textarea value={workDescription} onChange={(e) => handleWorkChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none resize-none h-32 focus:ring-2 focus:ring-indigo-500 transition-shadow" placeholder="구체적인 작업 내용을 입력하거나, 좌측 '수기 일지 자동 추출' 버튼을 사용하세요."/>
+                            <textarea value={workDescription} onChange={(e) => handleWorkChange(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none resize-none h-32 focus:ring-2 focus:ring-indigo-500 transition-shadow" placeholder={sessionType === 'AFTERNOON' ? "오전과 동일함 (특이 작업 내용 변경 시 수정)" : "구체적인 작업 내용을 입력하거나, 좌측 '수기 일지 자동 추출' 버튼을 사용하세요."}/>
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

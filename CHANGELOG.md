@@ -2,6 +2,13 @@
 
 이 문서는 프로젝트의 주요 변경 사항을 날짜 기준으로 관리합니다.
 
+## 2026-08-18
+
+### ✅ 오후 TBM 작업 내용 기본값 및 표시 보강 ('오전과 동일함')
+- `utils/teamUtils.ts`: `getWorkDescriptionDisplay` 헬퍼 함수 추가 (오후 TBM 세션에서 작업 내용이 비어있거나 '작업없음'/'내용 없음'인 경우 '오전과 동일함' 반환)
+- `components/TBMForm.tsx`: 오후 세션 선택/시간 변경 시 작업 내용 자동 설정 및 저정 시 '오전과 동일함' 기본값 적용, 플레이스홀더 보강
+- `components/ReportView.tsx` & `components/Dashboard.tsx`: 보고서 및 대시보드에서 오후 TBM 작업 내용을 '오전과 동일함'으로 명확하게 표시하도록 일관화
+
 ## 2026-06-09
 
 ### ✅ 스마트TBM지휘 Phase 3 & 4 E2E 통합 검증 완료
