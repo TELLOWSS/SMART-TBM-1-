@@ -609,44 +609,66 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
               targetAssessment = newAssessment;
               isNewCreated = true;
           } else {
-              if (detectedMonth && activeAssessment && detectedMonth !== activeAssessment.month && activeAssessment.type !== 'INITIAL') {
-                 const isConfirmed = await requestConfirm(`📄 문서 분석: [${detectedMonth}월] 자료입니다.\n\n해당 월로 등록하시겠습니까?`, {
-                     title: '월간 평가 등록',
-                     confirmLabel: '등록',
-                     variant: 'warning'
-                 });
-                 if (isConfirmed) {
-                    const existingTarget = monthlyAssessments.find(a => a.month === detectedMonth);
-                    if (existingTarget) {
-                       targetAssessment = existingTarget;
-                       setSelectedMonthId(existingTarget.id);
-                    } else {
-                       const newAssessment: MonthlyRiskAssessment = {
+              if (activeAssessment && activeAssessment.type === 'INITIAL' && !detectedMonth) {
+                  // If active is INITIAL and uploadType is MONTHLY without detected month, create new MONTHLY
+                  const currentMonthStr = new Date().toISOString().slice(0, 7);
+                  const newAssessment: MonthlyRiskAssessment = {
+                      id: `MONTH-${Date.now()}`,
+                      month: currentMonthStr,
+                      type: 'MONTHLY',
+                      fileName: file.name,
+                      priorities: [],
+                      createdAt: Date.now()
+                  };
+                  const updatedList = [newAssessment, ...assessments];
+                  onSave(updatedList);
+                  setSelectedMonthId(newAssessment.id);
+                  targetAssessment = newAssessment;
+                  isNewCreated = true;
+              } else if (detectedMonth && activeAssessment && detectedMonth !== activeAssessment.month && activeAssessment.type !== 'INITIAL') {
+                  const existingTarget = monthlyAssessments.find(a => a.month === detectedMonth);
+                  if (existingTarget) {
+                      targetAssessment = existingTarget;
+                      setSelectedMonthId(existingTarget.id);
+                  } else {
+                      const newAssessment: MonthlyRiskAssessment = {
                           id: `MONTH-${Date.now()}`,
                           month: detectedMonth,
                           type: 'MONTHLY',
                           fileName: file.name,
                           priorities: [],
                           createdAt: Date.now()
-                       };
-                       const updatedList = [newAssessment, ...assessments];
-                       onSave(updatedList);
-                       setSelectedMonthId(newAssessment.id);
-                       targetAssessment = newAssessment;
-                       isNewCreated = true;
-                    }
-                 } else {
-                     targetAssessment = activeAssessment;
-                 }
+                      };
+                      const updatedList = [newAssessment, ...assessments];
+                      onSave(updatedList);
+                      setSelectedMonthId(newAssessment.id);
+                      targetAssessment = newAssessment;
+                      isNewCreated = true;
+                  }
+              } else if (!activeAssessment) {
+                  const currentMonthStr = detectedMonth || new Date().toISOString().slice(0, 7);
+                  const newAssessment: MonthlyRiskAssessment = {
+                      id: `MONTH-${Date.now()}`,
+                      month: currentMonthStr,
+                      type: 'MONTHLY',
+                      fileName: file.name,
+                      priorities: [],
+                      createdAt: Date.now()
+                  };
+                  const updatedList = [newAssessment, ...assessments];
+                  onSave(updatedList);
+                  setSelectedMonthId(newAssessment.id);
+                  targetAssessment = newAssessment;
+                  isNewCreated = true;
               } else {
                   targetAssessment = activeAssessment;
               }
           }
 
           if (!targetAssessment) {
-                 announceStatus('평가 데이터를 저장할 대상을 선택하거나 새로 생성해주세요.');
-             setIsAnalyzing(false);
-             return;
+              announceStatus('평가 데이터를 저장할 대상을 선택하거나 새로 생성해주세요.');
+              setIsAnalyzing(false);
+              return;
           }
 
           const currentPriorities = [...(targetAssessment.priorities || [])];
@@ -660,7 +682,12 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
              });
 
              if (!isDuplicate) {
-                currentPriorities.push({ content: item.content, level: item.level, category: item.category });
+                currentPriorities.push({ 
+                    content: item.content, 
+                    level: item.level, 
+                    category: item.category,
+                    actionNote: item.actionNote 
+                });
                 addedCount++;
              }
           });
@@ -677,7 +704,6 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                   ? assessments.map(a => a.id === targetAssessment!.id ? targetAssessment! : a)
                   : [targetAssessment!, ...assessments];
               onSave(freshList);
-
           } else {
               const updatedList = assessments.map(a => 
                  a.id === targetAssessment!.id 
@@ -688,7 +714,8 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
           }
 
           setCandidates([]);
-                    announceStatus(`${addedCount}건의 항목이 등록되었습니다.`);
+          const highCount = extracted.filter(i => i.level === 'HIGH').length;
+          announceStatus(`위험성평가 분석 완료: 총 ${extracted.length}건 중 ${addedCount}건 등록 (상위험 ${highCount}건)`);
           
         } catch (err: any) {
           console.error(err);
@@ -1060,9 +1087,9 @@ export const RiskAssessmentManager: React.FC<RiskAssessmentManagerProps> = ({ as
                              </span>
                           </div>
                           <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3 leading-tight">
-                             {activeAssessment.type === 'REGULAR' ? `${activeAssessment.month.split('-')[0]}년 정기 위험성평가` : 
+                             {activeAssessment.type === 'REGULAR' ? '정기 위험성평가' : 
                               activeAssessment.type === 'INITIAL' ? '최초 위험성평가 (Baseline)' : 
-                              `${activeAssessment.month}월 월간/수시 위험성평가`}
+                              '월간/수시 위험성평가'}
                           </h2>
                           <p className="text-[10px] text-slate-400 mt-1 font-mono">ID: {activeAssessment.id}</p>
                        </div>

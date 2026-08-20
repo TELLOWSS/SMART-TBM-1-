@@ -402,9 +402,9 @@ export const ReportCenter: React.FC<ReportCenterProps> = ({ entries, onOpenPrint
       <div className={`rounded-2xl border p-4 shadow-sm ${remediationSummary.remediation > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
-                  <p className={`text-xs font-black uppercase tracking-wider ${remediationSummary.remediation > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>보정 대상 요약</p>
+                  <p className={`text-xs font-black uppercase tracking-wider ${remediationSummary.remediation > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>연계 점검 요약</p>
                   <p className="text-sm font-bold text-slate-800 mt-1">
-                      {remediationSummary.remediation > 0 ? '현재 목록에 위험성평가 연계 보정이 필요한 문서가 있습니다.' : '현재 목록은 모두 동일월 연계 상태입니다.'}
+                      {remediationSummary.remediation > 0 ? '현재 목록에 위험성평가 연계 보정이 필요한 문서가 있습니다.' : '현재 목록은 모두 위험성평가와 정상 연계되어 있습니다.'}
                   </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
@@ -418,7 +418,7 @@ export const ReportCenter: React.FC<ReportCenterProps> = ({ entries, onOpenPrint
                           <p className="text-lg font-black text-violet-600">{remediationSummary.mismatched}</p>
                       </div>
                       <div className="rounded-xl bg-white/80 border border-white px-3 py-2">
-                          <p className="text-[10px] font-bold text-slate-400">동일월 연계</p>
+                          <p className="text-[10px] font-bold text-slate-400">연계 완료</p>
                           <p className="text-lg font-black text-emerald-600">{remediationSummary.matched}</p>
                       </div>
                   </div>
@@ -489,9 +489,7 @@ export const ReportCenter: React.FC<ReportCenterProps> = ({ entries, onOpenPrint
 
              <div className="flex gap-2">
                  <button onClick={() => setSelectedLinkStatus('all')} aria-pressed={selectedLinkStatus === 'all'} aria-label="연계 여부 전체 필터" className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border whitespace-nowrap ${selectedLinkStatus === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>연계 전체</button>
-                 <button onClick={() => setSelectedLinkStatus('linked')} aria-pressed={selectedLinkStatus === 'linked'} aria-label="연계된 문서만 보기" className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border whitespace-nowrap ${selectedLinkStatus === 'linked' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>연계 있음</button>
-                 <button onClick={() => setSelectedLinkStatus('matched')} aria-pressed={selectedLinkStatus === 'matched'} aria-label="동일월 연계 문서만 보기" className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border whitespace-nowrap ${selectedLinkStatus === 'matched' ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>동일월 연계</button>
-                 <button onClick={() => setSelectedLinkStatus('mismatched')} aria-pressed={selectedLinkStatus === 'mismatched'} aria-label="동일월 미일치 문서만 보기" className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border whitespace-nowrap ${selectedLinkStatus === 'mismatched' ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>동일월 미일치</button>
+                 <button onClick={() => setSelectedLinkStatus('linked')} aria-pressed={selectedLinkStatus === 'linked'} aria-label="연계된 문서만 보기" className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border whitespace-nowrap ${selectedLinkStatus === 'linked' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>연계 완료</button>
                  <button onClick={() => setSelectedLinkStatus('unlinked')} aria-pressed={selectedLinkStatus === 'unlinked'} aria-label="미연계 문서만 보기" className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border whitespace-nowrap ${selectedLinkStatus === 'unlinked' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>미연계</button>
              </div>
 
@@ -530,58 +528,59 @@ export const ReportCenter: React.FC<ReportCenterProps> = ({ entries, onOpenPrint
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
              {filteredEntries.map((entry, idx) => {
                 const isSelected = selectedIds.has(entry.id);
-                     const needsLinkageRemediation = !entry.linkedRiskAssessmentId && !entry.linkedRiskAssessmentLabel;
-                     const hasSameMonthMismatch = !needsLinkageRemediation && !entry.linkedRiskAssessmentMatchedByMonth;
-                return (
-                <div 
-                    key={entry.id} 
-                    onClick={() => toggleSelection(entry.id)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            toggleSelection(entry.id);
-                        }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={isSelected}
-                    aria-label={`${entry.teamName} ${entry.date} ${entry.time} 기록 ${isSelected ? '선택됨' : '선택 안됨'}`}
-                    className={`bg-white rounded-2xl border p-0 overflow-hidden transition-all duration-300 group cursor-pointer relative ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md transform scale-[1.01]' : 'border-slate-200 hover:shadow-lg hover:-translate-y-1'}`} 
-                    style={{ animation: `slideUpFade 0.5s ease-out forwards ${idx * 0.05}s`, opacity: 0 }}
-                >
-                   {/* Selection Overlay Checkbox */}
-                   <div className={`absolute top-3 left-3 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300 group-hover:border-indigo-400'}`}>
-                       {isSelected && <CheckSquare size={14} className="text-white"/>}
-                   </div>
+                      const needsLinkageRemediation = !entry.linkedRiskAssessmentId && !entry.linkedRiskAssessmentLabel;
+                 return (
+                 <div 
+                     key={entry.id} 
+                     onClick={() => toggleSelection(entry.id)}
+                     onKeyDown={(e) => {
+                         if (e.key === 'Enter' || e.key === ' ') {
+                             e.preventDefault();
+                             toggleSelection(entry.id);
+                         }
+                     }}
+                     role="button"
+                     tabIndex={0}
+                     aria-pressed={isSelected}
+                     aria-label={`${entry.teamName} ${entry.date} ${entry.time} 기록 ${isSelected ? '선택됨' : '선택 안됨'}`}
+                     className={`bg-white rounded-2xl border p-0 overflow-hidden transition-all duration-300 group cursor-pointer relative ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md transform scale-[1.01]' : 'border-slate-200 hover:shadow-lg hover:-translate-y-1'}`} 
+                     style={{ animation: `slideUpFade 0.5s ease-out forwards ${idx * 0.05}s`, opacity: 0 }}
+                 >
+                    {/* Selection Overlay Checkbox */}
+                    <div className={`absolute top-3 left-3 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300 group-hover:border-indigo-400'}`}>
+                        {isSelected && <CheckSquare size={14} className="text-white"/>}
+                    </div>
 
-                   <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50 pl-12">
-                      <div>
-                         <h4 className={`font-bold text-sm ${isSelected ? 'text-indigo-700' : 'text-slate-800'}`}>{entry.teamName}</h4>
-                         <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium"><Calendar size={10} /> {entry.date} {entry.time}</div>
-                         {formatLocationSummary(entry) && (
-                             <div className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-sky-100 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700">
-                                 <MapPin size={10} className="shrink-0" />
-                                 <span className="truncate max-w-[220px]">{formatLocationSummary(entry)}</span>
-                             </div>
-                         )}
-                         {(needsLinkageRemediation || hasSameMonthMismatch) && (
-                             <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${needsLinkageRemediation ? 'bg-amber-100 text-amber-700' : 'bg-violet-100 text-violet-700'}`}>
-                                     {needsLinkageRemediation ? '연계 보정 필요' : '동일월 확인 필요'}
-                                 </span>
-                             </div>
-                         )}
-                         {entry.linkedRiskAssessmentLabel && (
-                             <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${entry.linkedRiskAssessmentMatchedByMonth ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                                     {entry.linkedRiskAssessmentMatchedByMonth ? '동일월 연계' : '위험성평가 연계'}
-                                 </span>
-                                 <span className="text-[10px] text-slate-500 truncate max-w-[180px]">{entry.linkedRiskAssessmentLabel}</span>
-                             </div>
-                         )}
-                      </div>
-                      <div className={`px-2 py-1 rounded text-[10px] font-bold border ${entry.riskFactors && entry.riskFactors.length > 0 ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'}`}>{entry.riskFactors && entry.riskFactors.length > 0 ? '위험 발견' : '양호'}</div>
-                   </div>
+                    <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50 pl-12">
+                       <div>
+                          <h4 className={`font-bold text-sm ${isSelected ? 'text-indigo-700' : 'text-slate-800'}`}>{entry.teamName}</h4>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium"><Calendar size={10} /> {entry.date} {entry.time}</div>
+                          {formatLocationSummary(entry) && (
+                              <div className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-sky-100 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700">
+                                  <MapPin size={10} className="shrink-0" />
+                                  <span className="truncate max-w-[220px]">{formatLocationSummary(entry)}</span>
+                              </div>
+                          )}
+                          {needsLinkageRemediation && (
+                              <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                      연계 보정 필요
+                                  </span>
+                              </div>
+                          )}
+                          {entry.linkedRiskAssessmentLabel && (
+                              <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                      위험성평가 연계
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 truncate max-w-[180px]">
+                                      {entry.linkedRiskAssessmentLabel.replace(/^\d{4}[-.]\d{1,2}(월)?\s*/, '')}
+                                  </span>
+                              </div>
+                          )}
+                       </div>
+                       <div className={`px-2 py-1 rounded text-[10px] font-bold border ${entry.riskFactors && entry.riskFactors.length > 0 ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'}`}>{entry.riskFactors && entry.riskFactors.length > 0 ? '위험 발견' : '양호'}</div>
+                    </div>
                    
                    <div className="h-32 bg-slate-100 relative overflow-hidden">
                       {entry.tbmPhotoUrl ? <img src={entry.tbmPhotoUrl} alt="증빙 사진" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-all" /> : <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs bg-slate-50"><AlertCircle size={20} className="mb-1"/><span>사진 없음</span></div>}

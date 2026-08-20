@@ -692,38 +692,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, siteName, normali
             </div>
 
             {dailySummary.todaysEntries.length > 0 && (
-                <div className={`rounded-3xl border p-4 md:p-5 shadow-sm ${dailySummary.missingLinkedEntries.length > 0 || dailySummary.mismatchedEntries.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                <div className={`rounded-3xl border p-4 md:p-5 shadow-sm ${dailySummary.missingLinkedEntries.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                         <div className="flex items-start gap-3">
-                            <div className={`p-2 rounded-xl ${dailySummary.missingLinkedEntries.length > 0 || dailySummary.mismatchedEntries.length > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                {dailySummary.missingLinkedEntries.length > 0 || dailySummary.mismatchedEntries.length > 0 ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
+                            <div className={`p-2 rounded-xl ${dailySummary.missingLinkedEntries.length > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {dailySummary.missingLinkedEntries.length > 0 ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
                             </div>
                             <div>
-                                <p className={`text-xs font-black uppercase tracking-wider ${dailySummary.missingLinkedEntries.length > 0 || dailySummary.mismatchedEntries.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                                    연계 점검
+                                <p className={`text-xs font-black uppercase tracking-wider ${dailySummary.missingLinkedEntries.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                    위험성평가 연계 점검
                                 </p>
                                 <p className="text-sm font-bold text-slate-800 mt-1">
-                                    {dailySummary.missingLinkedEntries.length > 0 || dailySummary.mismatchedEntries.length > 0
-                                        ? '금일 TBM 일부가 동일월 평가와 미정합 상태입니다.'
-                                        : '금일 TBM이 동일월 평가와 정상 연계되었습니다.'}
+                                    {dailySummary.missingLinkedEntries.length > 0
+                                        ? '금일 TBM 중 위험성평가 미연계 문서가 있습니다.'
+                                        : '금일 TBM이 최신 위험성평가와 정상 연계되었습니다.'}
                                 </p>
                                 <p className="text-xs text-slate-600 mt-1">
-                                    미연계 {dailySummary.missingLinkedEntries.length}건 · 미일치 {dailySummary.mismatchedEntries.length}건 · 연계 {dailySummary.matchedEntries.length}건
+                                    미연계 {dailySummary.missingLinkedEntries.length}건 · 연계 완료 {dailySummary.linkedEntries.length}건
                                 </p>
                             </div>
                         </div>
                         <div className="grid grid-cols-3 gap-2 md:min-w-[300px]">
                             <div className="rounded-2xl bg-white/80 border border-white px-3 py-2">
-                                <p className="text-[10px] font-bold text-slate-400">연계 문서</p>
-                                <p className="text-lg font-black text-slate-800">{dailySummary.linkedEntries.length}</p>
+                                <p className="text-[10px] font-bold text-slate-400">전체 TBM</p>
+                                <p className="text-lg font-black text-slate-800">{todaysEntries.length}</p>
                             </div>
                             <div className="rounded-2xl bg-white/80 border border-white px-3 py-2">
-                                <p className="text-[10px] font-bold text-slate-400">동일월 연계</p>
-                                <p className="text-lg font-black text-emerald-600">{dailySummary.matchedEntries.length}</p>
+                                <p className="text-[10px] font-bold text-slate-400">연계 완료</p>
+                                <p className="text-lg font-black text-emerald-600">{dailySummary.linkedEntries.length}</p>
                             </div>
                             <div className="rounded-2xl bg-white/80 border border-white px-3 py-2">
                                 <p className="text-[10px] font-bold text-slate-400">조치 필요</p>
-                                <p className={`text-lg font-black ${dailySummary.missingLinkedEntries.length > 0 || dailySummary.mismatchedEntries.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{dailySummary.missingLinkedEntries.length + dailySummary.mismatchedEntries.length}</p>
+                                <p className={`text-lg font-black ${dailySummary.missingLinkedEntries.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{dailySummary.missingLinkedEntries.length}</p>
                             </div>
                         </div>
                     </div>
@@ -1007,10 +1007,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, siteName, normali
                                         )}
                                         {entry.linkedRiskAssessmentLabel && (
                                             <div className="mt-1 flex items-center gap-1 flex-wrap">
-                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${entry.linkedRiskAssessmentMatchedByMonth ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                                                    {entry.linkedRiskAssessmentMatchedByMonth ? '동일월 연계' : '위험성평가 연계'}
+                                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                                    위험성평가 연계
                                                 </span>
-                                                <span className="text-[9px] text-slate-500 truncate max-w-[160px]">{entry.linkedRiskAssessmentLabel}</span>
+                                                <span className="text-[9px] text-slate-500 truncate max-w-[160px]">
+                                                    {entry.linkedRiskAssessmentLabel.replace(/^\d{4}[-.]\d{1,2}(월)?\s*/, '')}
+                                                </span>
                                             </div>
                                         )}
                                     </div>

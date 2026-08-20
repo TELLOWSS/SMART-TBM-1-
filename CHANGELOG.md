@@ -2,6 +2,14 @@
 
 이 문서는 프로젝트의 주요 변경 사항을 날짜 기준으로 관리합니다.
 
+## 2026-08-20
+
+### ✅ 위험성평가 등록부 자동 분석·확인 및 최신 연계 보장, 표기 개선
+- `services/geminiService.ts`: 한국 건설현장 위험성평가 등록부(공종, 작업, 유해위험요인, 위험등급 상/중/하, 개선대책, 즉시조치 메모)에 최적화된 프롬프트와 파싱 로직 적용 (`HIGH`/`GENERAL` 등급, 공종 분류, `actionNote` 추출)
+- `components/RiskAssessmentManager.tsx`: 등록부 업로드 즉시 자동 AI 분석 및 항목 등록, 완료 후 분석 요약 피드백(`N건 등록, 상위험 K건`) 및 포커싱 자동화
+- `App.tsx` & `components/TBMForm.tsx`: TBM 작성일과 무관하게 등록된 유효 위험성평가 중 최신 위험성평가(월간/수시 우선, 최신 월, 최신 등록일)를 항상 1순위로 연계하여 중점위험관리사항 및 상위험 항목이 정상 반영되도록 보장
+- `components/TBMForm.tsx`, `components/ReportView.tsx`, `components/ReportCenter.tsx`, `components/Dashboard.tsx`, `components/SafetyDataLab.tsx`: '2026-08월 위험성평가' 같은 특정 연월("언제") 표기를 배제하고 '월간/수시 위험성평가'로 라벨 통일, '동일월 미일치' 오류성 텍스트를 '위험성평가 연계', '최신 연계율'로 정비
+
 ## 2026-08-18
 
 ### ✅ 오후 TBM 작업 내용 기본값 및 표시 보강 ('오전과 동일함')

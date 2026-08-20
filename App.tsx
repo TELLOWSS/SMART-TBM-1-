@@ -1052,17 +1052,27 @@ const App = () => {
   };
 
   const linkedRiskAssessment = useMemo(() => {
-      return [...assessments]
-          .filter(a => Array.isArray(a.priorities) && a.priorities.length > 0)
-          .sort((a, b) => {
-              const monthlyWeightA = a.type === 'MONTHLY' ? 1 : 0;
-              const monthlyWeightB = b.type === 'MONTHLY' ? 1 : 0;
-              if (monthlyWeightA !== monthlyWeightB) {
-                  return monthlyWeightB - monthlyWeightA;
-              }
+      const valid = [...assessments].filter(a => Array.isArray(a.priorities) && a.priorities.length > 0);
+      if (valid.length === 0) return undefined;
 
-              return (b.createdAt ?? 0) - (a.createdAt ?? 0);
-          })[0];
+      return valid.sort((a, b) => {
+          // 1. MONTHLY(월간/수시) 우선
+          const monthlyWeightA = a.type === 'MONTHLY' ? 1 : 0;
+          const monthlyWeightB = b.type === 'MONTHLY' ? 1 : 0;
+          if (monthlyWeightA !== monthlyWeightB) {
+              return monthlyWeightB - monthlyWeightA;
+          }
+
+          // 2. 최신 월(month) 우선
+          const monthA = a.month || '';
+          const monthB = b.month || '';
+          if (monthA !== monthB) {
+              return monthB.localeCompare(monthA);
+          }
+
+          // 3. 최신 등록일(createdAt) 우선
+          return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+      })[0];
   }, [assessments]);
 
   const monthlyGuidelines: SafetyGuideline[] = useMemo(() => {
@@ -1139,8 +1149,8 @@ const App = () => {
                             label: linkedRiskAssessment.type === 'INITIAL'
                                 ? '최초 위험성평가'
                                 : linkedRiskAssessment.type === 'REGULAR'
-                                ? `${linkedRiskAssessment.month.split('-')[0]}년 정기 위험성평가`
-                                : `${linkedRiskAssessment.month}월 월간/수시 위험성평가`,
+                                ? '정기 위험성평가'
+                                : '월간/수시 위험성평가',
                             total: linkedRiskAssessment.priorities.length,
                             high: linkedRiskAssessment.priorities.filter(item => item.level === 'HIGH').length,
                             actionNotes: linkedRiskAssessment.priorities.filter(item => !!item.actionNote?.trim()).length,

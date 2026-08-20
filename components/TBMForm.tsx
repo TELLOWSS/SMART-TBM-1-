@@ -517,21 +517,23 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
       const validAssessments = (riskAssessments || []).filter(assessment => Array.isArray(assessment.priorities) && assessment.priorities.length > 0);
       if (validAssessments.length === 0) return undefined;
 
-      const targetMonth = entryDate?.slice(0, 7);
-      const exactMonthly = validAssessments
-          .filter(assessment => assessment.type === 'MONTHLY' && assessment.month === targetMonth)
-          .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0];
+      // 가장 최신의 유효한 위험성평가를 확실하게 연계 (1: MONTHLY 우선, 2: 최신 month, 3: 최신 createdAt)
+      return [...validAssessments].sort((a, b) => {
+          const monthlyWeightA = a.type === 'MONTHLY' ? 1 : 0;
+          const monthlyWeightB = b.type === 'MONTHLY' ? 1 : 0;
+          if (monthlyWeightA !== monthlyWeightB) {
+              return monthlyWeightB - monthlyWeightA;
+          }
 
-      if (exactMonthly) return exactMonthly;
+          const monthA = a.month || '';
+          const monthB = b.month || '';
+          if (monthA !== monthB) {
+              return monthB.localeCompare(monthA);
+          }
 
-      const latestMonthly = validAssessments
-          .filter(assessment => assessment.type === 'MONTHLY')
-          .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0];
-
-      if (latestMonthly) return latestMonthly;
-
-      return [...validAssessments].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0];
-  }, [riskAssessments, entryDate]);
+          return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+      })[0];
+  }, [riskAssessments]);
 
   const effectiveGuidelines = resolvedLinkedRiskAssessment?.priorities || monthlyGuidelines;
 
@@ -582,25 +584,25 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
               label: resolvedLinkedRiskAssessment.type === 'INITIAL'
                   ? '최초 위험성평가'
                   : resolvedLinkedRiskAssessment.type === 'REGULAR'
-                  ? `${resolvedLinkedRiskAssessment.month.split('-')[0]}년 정기 위험성평가`
-                  : `${resolvedLinkedRiskAssessment.month}월 월간/수시 위험성평가`,
+                  ? '정기 위험성평가'
+                  : '월간/수시 위험성평가',
               total: resolvedLinkedRiskAssessment.priorities.length,
               high: resolvedLinkedRiskAssessment.priorities.filter(item => item.level === 'HIGH').length,
               actionNotes: resolvedLinkedRiskAssessment.priorities.filter(item => !!item.actionNote?.trim()).length,
               id: resolvedLinkedRiskAssessment.id,
-              matchedByMonth: resolvedLinkedRiskAssessment.type === 'MONTHLY' && resolvedLinkedRiskAssessment.month === entryDate.slice(0, 7),
+              matchedByMonth: true,
           };
       }
 
       if (linkedRiskAssessment) {
           return {
               ...linkedRiskAssessment,
-              matchedByMonth: false,
+              matchedByMonth: true,
           };
       }
 
       return undefined;
-  }, [resolvedLinkedRiskAssessment, linkedRiskAssessment, entryDate]);
+  }, [resolvedLinkedRiskAssessment, linkedRiskAssessment]);
 
   const activePageInfo = React.useMemo(() => {
       const activeItem = queue.find(item => item.tempId === activeId);
@@ -2371,8 +2373,8 @@ export const TBMForm: React.FC<TBMFormProps> = ({ onSave, onCancel, monthlyGuide
                                                     <p className="text-sm font-black text-emerald-600">{linkedRiskAssessmentSummary.actionNotes}건</p>
                                                 </div>
                                             </div>
-                                            <p className={`mt-3 inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black ${linkedRiskAssessmentSummary.matchedByMonth ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-                                                {linkedRiskAssessmentSummary.matchedByMonth ? '입력 일자와 같은 월 위험성평가 우선 연계' : '최신 위험성평가 기준으로 연계'}
+                                            <p className="mt-3 inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black bg-emerald-600 text-white">
+                                                최신 위험성평가 연계 완료 ({linkedRiskAssessmentSummary.label})
                                             </p>
                                             <p className="mt-3 text-[11px] text-slate-600 leading-relaxed">
                                                 수기 일지 OCR, 안전 코멘트 생성, 동영상 평가 시 현재 연계된 위험성평가 항목이 함께 사용됩니다.

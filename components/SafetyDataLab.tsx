@@ -1889,7 +1889,7 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
                                 <p className="text-[10px] text-slate-500 mt-1">{filteredAnalysis.linkedEntriesCount} / {filteredAnalysis.totalEntries}건</p>
                             </div>
                             <div className="rounded-xl bg-slate-950/70 border border-slate-700/50 p-3">
-                                <p className="text-[10px] text-slate-500 font-bold mb-1">동일월 연계율</p>
+                                <p className="text-[10px] text-slate-500 font-bold mb-1">최신 연계율</p>
                                 <p className="text-lg font-black text-emerald-300">{filteredAnalysis.sameMonthLinkedRate}<span className="text-xs text-slate-500 ml-1">%</span></p>
                                 <p className="text-[10px] text-slate-500 mt-1">{filteredAnalysis.sameMonthLinkedCount}건</p>
                             </div>
@@ -1910,11 +1910,11 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
                                         <div key={team.teamName} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
                                             <div className="min-w-0">
                                                 <p className="text-xs font-bold text-white truncate">{team.teamName}</p>
-                                                <p className="text-[10px] text-slate-500">연계 {team.linked}/{team.total} · 동일월 {team.matched}건</p>
+                                                <p className="text-[10px] text-slate-500">연계 {team.linked}/{team.total} · 최신 연계 {team.matched}건</p>
                                             </div>
                                             <div className="text-right shrink-0">
                                                 <p className="text-sm font-black text-cyan-300">{team.linkedRate}%</p>
-                                                <p className="text-[10px] text-emerald-400">동일월 {team.matchedRate}%</p>
+                                                <p className="text-[10px] text-emerald-400">최신 연계 {team.matchedRate}%</p>
                                             </div>
                                         </div>
                                     ))}
@@ -1971,7 +1971,7 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
                                         <div key={month.key} className="flex flex-col items-center justify-end gap-2 h-full relative z-20">
                                             <div className="w-full flex items-end justify-center gap-1 h-full">
                                                 <div className="w-3 rounded-t bg-cyan-500/80" style={{ height: `${month.linkedRate}%` }} title={`${month.label} 연계율 ${month.linkedRate}%`}></div>
-                                                <div className="w-3 rounded-t bg-emerald-400/90" style={{ height: `${month.matchedRate}%` }} title={`${month.label} 동일월 연계율 ${month.matchedRate}%`}></div>
+                                                <div className="w-3 rounded-t bg-emerald-400/90" style={{ height: `${month.matchedRate}%` }} title={`${month.label} 최신 연계율 ${month.matchedRate}%`}></div>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-[10px] font-bold text-slate-400">{month.label}</p>
@@ -1983,7 +1983,7 @@ export const SafetyDataLab: React.FC<SafetyDataLabProps> = ({ entries, teams, on
                             </div>
                             <div className="mt-2 flex items-center gap-4 text-[10px] text-slate-500 font-bold">
                                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-cyan-500"></span>연계율</span>
-                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-400"></span>동일월 연계율</span>
+                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-400"></span>최신 연계율</span>
                                 <span className="flex items-center gap-1"><span className="w-3 h-px border-t border-dashed border-rose-400"></span>목표선</span>
                             </div>
                         </div>
