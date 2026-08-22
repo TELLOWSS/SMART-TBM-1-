@@ -715,7 +715,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ entries, siteName, normali
                         <div className="grid grid-cols-3 gap-2 md:min-w-[300px]">
                             <div className="rounded-2xl bg-white/80 border border-white px-3 py-2">
                                 <p className="text-[10px] font-bold text-slate-400">전체 TBM</p>
-                                <p className="text-lg font-black text-slate-800">{todaysEntries.length}</p>
+                                <p className="text-lg font-black text-slate-800">{dailySummary.todaysEntries.length}</p>
                             </div>
                             <div className="rounded-2xl bg-white/80 border border-white px-3 py-2">
                                 <p className="text-[10px] font-bold text-slate-400">연계 완료</p>
